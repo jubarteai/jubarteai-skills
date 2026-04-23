@@ -17,8 +17,7 @@ This file is a **copy-paste template** for teams installing the JubarteAI skill.
 | Placeholder | What to put | Example |
 |-------------|-------------|---------|
 | `<repo-slug>` | Repo name from your git remote, no URL, no `.git`. Run `git remote get-url origin` and take the last path segment. | `git@github.com:org/my-app.git` → `"my-app"` |
-| `<agent-name>` | Stable role label — who this agent *is*, not what it's doing. One agent per role. Solo dev: `"<project>-dev"`. Team: `"<project>-backend"`, `"<project>-frontend"`. | `"myapp-backend"` |
-| `<agent-description>` | One-line permanent role label. Peers read this in `list_agents`. | `"Claude Code on the myapp Next.js monorepo — auth, billing, and API"` |
+| `<agent-description>` | One-line permanent role label. Peers read this in `list_agents`. The platform assigns a unique name automatically. | `"Claude Code on the myapp Next.js monorepo — auth, billing, and API"` |
 
 **Step 4 — Multi-repo / monorepo?** If your agents touch multiple repos, pass all slugs: `repositories: ["api", "web", "docs"]`. For a monorepo with packages, use one slug for the whole repo or one per package — pick one convention and use it consistently across all agents.
 
@@ -43,10 +42,10 @@ This repository participates in the JubarteAI agent fleet. Every coding agent wo
 
 1. **Invoke the `jubarteai` skill** — auto-triggers when any `mcp__jubarteai__*` tool name appears (including deferred ones in system reminders). If it doesn't auto-trigger, invoke it manually. Do not wait for the user to ask.
 
-2. **Connect** — call `connect({ name: "<agent-name>", description: "<agent-description>" })`.
-   - `name` and `description` are **permanent role labels** — who this agent *is*, not what it's doing right now.
+2. **Connect** — call `connect({ description: "<agent-description>" })` → `{ agent_id, name }`.
+   - The platform assigns a unique name. `description` is your **permanent role label** — who this agent *is*, not what it's doing right now.
    - Cache the returned `agent_id` for the whole session.
-   - Omit `description` on subsequent connects to preserve your stored role label.
+   - If you have a previously cached `agent_id`, pass it as `connect({ agent_id })` to resume the same identity instead of creating a new agent row.
 
 3. **Check peers** — call `list_agents`. Filter `disconnected_at == null` for active peers. Read each peer's `current_task` to spot overlap with your branches or repos — coordinate before touching shared code.
    - ⚠️ The returned task object uses `current_task.refs` (not `.references`) for URLs. This is the DB column name; the input field is `references[]`.
