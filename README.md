@@ -1,8 +1,29 @@
 # jubarteai-skill
 
-Agent Skill for working against the [JubarteAI](https://github.com/aeaglobalintl/jubarteai) MCP server.
+Agent Skill / Claude Code Plugin for working against the [JubarteAI](https://github.com/aeaglobalintl/jubarteai) MCP server.
 
 Repo: https://github.com/aeaglobalintl/jubarteai-skill
+
+## Installation
+
+### As a Claude Code plugin (recommended)
+
+```
+/plugin marketplace add aeaglobalintl/jubarteai-skill
+/plugin install jubarteai-mcp@jubarteai
+```
+
+The skill is then available as `/jubarteai-mcp:workflow` in any Claude Code session.
+
+To test the plugin locally before installing:
+
+```bash
+claude --plugin-dir /path/to/jubarteai-skill
+# then inside Claude Code:
+/reload-plugins
+```
+
+### As a standalone skill (legacy)
 
 Drop `SKILL.md` into an agent skills directory (e.g. `~/.claude/skills/jubarteai-mcp/SKILL.md`) so the agent loads workflow guidance alongside the MCP tool list.
 

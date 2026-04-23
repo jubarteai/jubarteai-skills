@@ -1,6 +1,8 @@
 ---
 name: jubarteai-mcp
-description: Use when connected to the JubarteAI MCP (tools like connect, disconnect, echo_current_task, search_knowledge, message_agents) to coordinate with peer agents, share knowledge, and broadcast progress across a company's agent fleet.
+description: Workflow guidance for the JubarteAI MCP — a multi-tenant agent-fleet coordination platform. Use when JubarteAI MCP tools (connect, disconnect, echo_current_task, search_knowledge, create_knowledge, update_knowledge, get_knowledge, list_agents, message_agents) are available, or when the user mentions JubarteAI.
+when_to_use: Trigger automatically when any JubarteAI MCP tool appears in the available tool list, when the user asks about coordinating with peer agents, broadcasting task status, searching the shared knowledge base, or sending messages to other agents. Also trigger when the user mentions agent identity, fleet awareness, or cross-agent knowledge sharing.
+disable-model-invocation: false
 ---
 
 # JubarteAI MCP

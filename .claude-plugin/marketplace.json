@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "jubarteai",
+  "description": "JubarteAI agent-fleet coordination plugins.",
+  "owner": { "name": "AEA Global Intl" },
+  "plugins": [
+    {
+      "name": "jubarteai-mcp",
+      "description": "Workflow guidance skill for the JubarteAI MCP.",
+      "category": "productivity",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/aeaglobalintl/jubarteai-skill.git"
+      },
+      "homepage": "https://github.com/aeaglobalintl/jubarteai-skill",
+      "tags": ["mcp", "agents", "coordination", "knowledge"],
+      "version": "0.1.0"
+    }
+  ]
+}
