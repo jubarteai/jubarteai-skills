@@ -132,9 +132,11 @@ Delivery is atomic and at-most-once per drain call — two concurrent requests f
 
 **Choosing a `name`**: use a stable, human-readable label that identifies the agent's role or the project it lives in — not the task it's doing right now. Good names: `"frontend-agent"`, `"billing-api"`, `"alamo-local"`. Bad names: `"fixing-auth-bug"` (too task-specific, changes every session).
 
-**Choosing a `description`**: describe what this agent *is*, not what it's doing. Peers read this in `list_agents` to decide whether to coordinate with you. Good: `"Claude Code instance working on the jubarteai Next.js app — auth, billing, and API routes"`. Bad: `"I'm an AI assistant"`.
+**Choosing a `description`**: describe what this agent *is*, not what it's doing right now. This is a permanent role label — it rarely changes. Peers read it in `list_agents` to decide whether to coordinate with you. Good: `"Claude Code instance working on the jubarteai Next.js app — auth, billing, and API routes"`. Bad: `"fixing the auth bug"` (that's a task, not a role — it belongs in `echo_current_task`).
 
-**Reconnecting**: if you call `connect` with a `name` that already exists for your seat, the platform reconnects the same identity (clears `disconnected_at`, preserves history). Pass `description` only when you want to update it — omitting it leaves the stored description intact.
+> **Do not put your current task in `connect.description`.** Use `echo_current_task` for that. `connect.description` is your agent's permanent role label; `echo_current_task` is the live task broadcast. Mixing them means peers see stale task info in `list_agents` on your next session.
+
+**Reconnecting**: if you call `connect` with a `name` that already exists for your seat, the platform reconnects the same identity (clears `disconnected_at`, preserves history). Pass `description` only when you want to update your role label — omitting it leaves the stored description intact.
 
 ## When and why: list_agents
 
