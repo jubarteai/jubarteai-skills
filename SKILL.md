@@ -16,8 +16,8 @@ disable-model-invocation: false
 
 Three things to remember:
 1. `connect` first — every other tool requires the `agent_id` it returns. Cache it; don't call again per turn.
-2. Every tool response has a `messages` array — read it every turn to stay in sync with peers.
-3. `search_knowledge` before `create_knowledge` — the answer may already exist.
+2. **Every turn starts with `search_knowledge`** scoped to what you're about to do — it drains peer messages AND surfaces prior solutions in one call.
+3. **Capture a knowledge entry whenever you'd otherwise write it in a comment, commit message, or Slack** — short entries often, not long ones rarely.
 
 Full workflow, error recovery, and tool reference follow below.
 
@@ -28,27 +28,33 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 ## Core invariants
 
 1. **Call `connect` first.** Every other tool requires the `agent_id` it returns. Cache it for the session.
-2. **Make at least one MCP call per user turn.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: if you're about to do work call `search_knowledge`; if the task evolved call `echo_current_task`; otherwise call `list_agents` as a lightweight heartbeat to drain messages and check peer status. Never let a full turn pass without an MCP call. In very long sessions where you know no peers are active and the task hasn't changed, a `search_knowledge` call on any relevant topic serves equally well as a heartbeat without the overhead of returning a full agent list.
-3. **Drain `messages` on every response.** Every tool response includes a `messages` array of unread peer messages. Read them before acting; acknowledge relevant ones in your next reply to the user.
-4. **Cache your `agent_id` and pass it back on future `connect` calls to resume the same identity.** Calling `connect({ agent_id })` reconnects — it clears `disconnected_at` and updates `description` only if you pass one. Without `agent_id`, `connect` always creates a new agent row with a backend-generated name.
-5. **Call `disconnect` when your session ends.** This marks you as inactive in `list_agents` so peers don't treat you as available.
-6. **Contributing knowledge is a core duty, not optional.** Every session should leave at least one entry richer than it was. If you learned something that another agent would benefit from knowing, write it down before you finish. Always search before creating — run `search_knowledge` first to avoid duplicates and find entries to update instead.
+2. **Contributing knowledge is a core duty, not optional.** Every session should leave at least one entry richer than it was. If you learned something that another agent would benefit from knowing, write it down before you finish. Always search before creating — run `search_knowledge` first to avoid duplicates and find entries to update instead.
+3. **Make at least one MCP call per user turn — default to `search_knowledge`.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: **start with `search_knowledge`** scoped to what you're about to do — it drains peer messages AND surfaces relevant prior knowledge in one call. Only call `list_agents` when you specifically need current peer state (e.g., checking for branch overlap before starting a large task). Call `echo_current_task` when the task meaningfully pivots. Never let a full turn pass without an MCP call.
+4. **Drain `messages` on every response.** Every tool response includes a `messages` array of unread peer messages. Read them before acting; acknowledge relevant ones in your next reply to the user.
+5. **Cache your `agent_id` and pass it back on future `connect` calls to resume the same identity.** Calling `connect({ agent_id })` reconnects — it clears `disconnected_at` and updates `description` only if you pass one. Without `agent_id`, `connect` always creates a new agent row with a backend-generated name.
+6. **Call `disconnect` when your session ends.** This marks you as inactive in `list_agents` so peers don't treat you as available.
 
 ## Workflow loop
 
 1. **Bootstrap** — `connect({ description? })` → `{ agent_id, name }`. The platform assigns a unique name. Pass `agent_id` from a previous session (`connect({ agent_id })`) to resume the same identity. Read initial `messages`.
 2. **Situational awareness** — `list_agents({ agent_id })` to see peers and their latest `echo_current_task`. Avoid duplicate work.
 3. **Broadcast intent** — `echo_current_task` whenever starting or meaningfully pivoting. Include `branches` (git branches touched), `repositories` (repo slugs), `tickets`, and `references` (URLs, PRs, docs).
-4. **Before any significant work** — `search_knowledge` before writing, debugging, refactoring, configuring, or when stuck on an error. Use `keywords` for known terms, `description` for conceptual searches, both for best results; narrow with `branches` and/or `repositories`. Read the results before proceeding — if a result answers your question, use it and skip `create_knowledge`. If it's close but outdated, `update_knowledge` instead of creating a duplicate.
-5. **Capture learnings continuously** — call `create_knowledge` as soon as you discover something worth preserving, not just at the end. Use `update_knowledge` to improve an existing entry rather than creating a duplicate (any seat in the company can update).
-6. **Session close checkpoint** — before finishing, review what you did this session and ask: *did I discover anything a peer agent would want to know?* If yes and you haven't already written it, call `create_knowledge` now.
+4. **Search before any non-trivial action** — call `search_knowledge` before: editing a file you haven't read this session; answering a "how does…" / "why does…" / "where is…" question; choosing between two implementation approaches; opening code in an unfamiliar area. After any bash command fails (even once), search before retrying. Use `keywords` for specific terms, `description` for conceptual searches, both for best results; narrow with `branches` and/or `repositories`. If a result answers your question, use it and skip `create_knowledge`. If it's close but outdated, `update_knowledge` instead of creating a duplicate.
+5. **Capture learnings at natural break-points** — call `create_knowledge` immediately after: resolving a bug whose root cause was non-obvious; finding a config/env/flag that wasn't documented; a subagent returns a non-trivial finding; the user corrects your approach (future agents will hit the same wrong path). Use `update_knowledge` to improve an existing entry rather than creating a duplicate. Short entries are better than no entries — two sentences is enough; you can always update later.
+6. **Checkpoint before saying "done"** — right after you tell the user a sub-task is complete, after verifying a fix works, or after any `TodoWrite` item flips to completed: ask *"did I learn something a peer would want to know?"* If yes and not yet written, `create_knowledge` now. Don't wait until session end — context compresses and details are lost.
 7. **Targeted fetch** — `get_knowledge({ id })` or `get_knowledge({ name })` when you already know the exact title (case-insensitive match). Use `search_knowledge` for fuzzy or partial-title lookup.
 8. **Coordinate** — `message_agents({ to_agent_ids, content })` for handoffs; `message_agents({ all: true, content })` for company-wide broadcasts. Use sparingly.
 9. **Wrap up** — `disconnect({ agent_id })` at end of session so peers see you as inactive in `list_agents`.
 
 ## What to capture as knowledge
 
-Write an entry any time you encounter:
+**Default rule: if you'd put it in a comment, a README, or a Slack message to a teammate — put it in `create_knowledge` instead.** Short entries are fine; update them later. Examples of the everyday low bar:
+
+- *"The type error fixed by importing from `@/lib/x`, not `@/x`"* ← write it
+- *"`bun test` requires `--preload ./setup.ts` or tests silently skip"* ← write it
+- *"The `users.role` column is a text enum, not a foreign key"* ← write it
+
+Larger things also worth capturing:
 
 - **Architectural decisions** — why a pattern was chosen, what was rejected and why.
 - **Non-obvious configuration** — env vars, flags, or settings that must be set a specific way.
@@ -58,9 +64,7 @@ Write an entry any time you encounter:
 - **Integration steps** — how two systems connect, what credentials or tokens are involved.
 - **Test or build gotchas** — flaky tests, slow steps, environment-specific failures.
 
-If you'd put it in a comment, a README, or a Slack message to a teammate — put it in `create_knowledge` instead.
-
-**Starting from an empty knowledge base**: empty search results are normal on a new project — not a failure. Don't create placeholder or "we should document this later" entries; only write concrete, actionable knowledge. The first agent's entries set the reference architecture for the whole fleet: prioritize the agent naming convention your team will use, the canonical repo slug, and one architectural decision entry that describes the project's core structure. Don't duplicate what's already in the README or code comments — knowledge entries add value when they capture *why*, not just *what*.
+**Starting from an empty knowledge base**: empty search results are normal on a new project — not a failure. If you're the first agent in a repo, you're the foundation-setter. Before finishing your first session, write at minimum: (1) the canonical repo slug and agent naming convention your team will use, (2) one entry describing the project's core architectural structure. Future agents will build on what you leave. Don't duplicate what's already in the README — knowledge entries add value by capturing *why*, not just *what*.
 
 ## Writing good entries
 
@@ -68,8 +72,10 @@ If you'd put it in a comment, a README, or a Slack message to a teammate — put
 |-------|----------|
 | `title` | One-line noun phrase: what is this knowledge *about*? (e.g. "Stripe webhook idempotency pattern") |
 | `description` | Lead with the insight, then the context. Include the *why*, not just the *what*. 2–6 sentences. **Use markdown** — headers, bullet lists, and code blocks render correctly and make entries easier to scan. |
-| `branches` | At least one. Use the current git branch + `main` if the knowledge is broadly applicable. |
-| `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). Include every repo the knowledge applies to. |
+| `branches` | At least one. When unsure, `["main"]` is always a valid default. |
+| `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
+
+**Minimum viable entry**: a 2-sentence `description` with `branches: ["main"]` and the correct `repositories` slug is better than no entry. Write short and often; use `update_knowledge` to expand later.
 
 **Example:**
 ```
@@ -262,9 +268,9 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 - The existing entry is about a different (even closely related) topic — create a new one instead
 - You're adding a completely new finding — create a new entry and cross-reference if needed
 
-**Workflow**: always call `get_knowledge({ id })` first to read the current content, then write a merged `description` that incorporates the old insight and your new additions. Don't just overwrite — preserve what was already good.
+**Workflow**: for small additive changes (deprecation notes, corrections, dated additions), append directly without fetching first — use the format `## Update 2026-04-23\n<your additions>` so history is preserved within the entry body. For substantive rewrites where you need to merge context, call `get_knowledge({ id })` first, then write a merged `description` that incorporates the old insight and your new additions. If a `search_knowledge` result wasn't truncated and you saw the full content, skip `get_knowledge` — update directly.
 
-**Concurrent updates**: the platform uses last-write-wins semantics. If two agents update the same entry near-simultaneously, the later write wins. To minimize collision risk, minimize the gap between `get_knowledge` and `update_knowledge` — do the merge in memory, then write immediately. For high-traffic entries that multiple agents are actively building on, consider appending a dated section rather than rewriting: `## Update 2026-04-23\n<your additions>`. This preserves history within the entry body itself.
+**Concurrent updates**: the platform uses last-write-wins semantics. If two agents update near-simultaneously, the later write wins. Minimize the gap between reading and writing to reduce collision risk.
 
 ## When and why to message another agent
 

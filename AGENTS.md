@@ -37,6 +37,7 @@ This repository participates in the JubarteAI agent fleet. Every coding agent wo
 - Call `connect` more than once per session — cache `agent_id` and reuse it.
 - Skip `search_knowledge` before `create_knowledge` — always search first to avoid duplicates.
 - Let a full conversation turn pass without an MCP call — peer messages pile up unread.
+- Finish a task without running at least one `search_knowledge` on it — even one search often surfaces a useful prior entry or avoids duplicating work.
 
 ### Session start — once per conversation
 
@@ -54,19 +55,19 @@ This repository participates in the JubarteAI agent fleet. Every coding agent wo
 
 ### Every user turn
 
-Pick **one** of these each turn — never skip a turn entirely:
+Make one MCP call per turn — never skip a turn entirely. **Default: `search_knowledge`.**
 
-- **About to do work** → call `search_knowledge` with `repositories: ["<repo-slug>"]` before writing, debugging, refactoring, or when stuck. Use `keywords` for known terms, `description` for conceptual searches, both for best results.
+- **Default** → call `search_knowledge` with keywords from what you're about to do. It drains peer messages AND surfaces prior solutions in one call. Concrete triggers: before editing any file you haven't read this session; after any failed bash command; before answering "how does…" / "why does…" questions; before choosing between two approaches.
 - **Task evolved** → call `echo_current_task` to re-broadcast.
-- **Otherwise** → call `list_agents` as a heartbeat to drain peer messages. In long sessions with no active peers, `search_knowledge` on any relevant topic works equally well without fetching the full agent list.
+- **Need current peer state** (checking branch overlap, coordinating before a large change) → call `list_agents`.
 
 ### Core workflow
 
 5. **Act on search results** — if a result answers your question, use it and skip `create_knowledge`. If it's close but outdated, call `update_knowledge` rather than creating a duplicate. **Update if**: same root topic + same component + same problem class. **Create new if**: the problem or system differs — then cross-reference the related entry in the description.
 
-6. **Capture learnings continuously** — call `create_knowledge` as soon as you find something reusable (architectural decisions, non-obvious config, bug root causes, API quirks, repeatable patterns, integration steps, test/build gotchas). Don't wait until session end — context compresses and details are lost.
+6. **Capture learnings at natural break-points** — call `create_knowledge` immediately after: resolving a non-obvious bug; finding a config/flag not in the README; a subagent returns a non-trivial finding; the user corrects your approach. Short entries are fine — two sentences beats nothing. Don't wait until session end; context compresses and details are lost.
 
-7. **Session-close checkpoint** — before finishing, ask: *did I discover anything a peer would want to know?* If yes and not yet written, `create_knowledge` now.
+7. **Checkpoint before saying "done"** — after each sub-task completes, after verifying a fix works: ask *"did I learn something a peer would want to know?"* If yes and not yet written, `create_knowledge` now.
 
 8. **Message peers when coordination can't wait** — use `message_agents` for handoffs, conflict warnings, blocking errors, or delegation. Include branch names, function names, or error messages — vague messages don't unblock anyone. State the required next action. Example: `"I'm about to rename UserService to AccountService on feature/refactor — if you have open changes touching UserService, hold off or we'll get merge conflicts."` Don't use messages for knowledge transfer; write `create_knowledge` first and reference it.
 
