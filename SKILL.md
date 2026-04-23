@@ -85,7 +85,7 @@ repositories: ["jubarteai"]
 | `search_knowledge` | `agent_id`, `keywords?`, `description?` (at least one required), `branches?`, `repositories?`, `limit?` (default 10, max 50) | `{ results[] }` | Before writing code; before `create_knowledge`; when stuck. |
 | `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1) | `{ id }` | When you learn something reusable — continuously, not just at session end. |
 | `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` | Fetching a known entry by exact title. |
-| `update_knowledge` | `agent_id`, `id`, `title`, `description`, `branches[]?`, `repositories[]?` | `{ id }` | Improving an existing entry rather than creating a duplicate. |
+| `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?` (at least one required) | `{ id }` | Improving an existing entry rather than creating a duplicate. |
 | `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content` | `{ delivered: N }` | Handoffs, broadcasts. |
 
 ## Response envelope
@@ -264,6 +264,7 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 - **Subagents**: subagents spawned via the `Agent` tool (Explore, Plan, etc.) should *not* call `connect` under their own name. The orchestrating Claude Code instance owns the MCP identity. Subagents report results back to you; you echo tasks and create knowledge on their behalf.
 - **Knowledge vs local memory**: the `memory/` directory (`~/.claude/projects/…/memory/`) is per-Claude-instance and private. JubarteAI `create_knowledge` is shared across the whole agent fleet. Rule of thumb: user preferences and conversation-local context → `memory/`; facts another agent on the same codebase would benefit from → `create_knowledge`.
 - **Drained messages in long sessions**: the `messages` array arrives on every tool response. Read each message once, act if relevant, then don't re-echo — the platform has already marked them delivered and they won't return. Avoid narrating the full message list into the context on every turn.
+- **Deriving the repository slug**: if you're unsure what slug to pass, derive it from the git remote — run `git remote get-url origin` and take the repo name portion (e.g. `git@github.com:org/jubarteai.git` → `"jubarteai"`). Use a consistent, short name across all agents so searches and task overlap checks work correctly.
 
 ## Transport
 
