@@ -26,8 +26,8 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 
 1. **Bootstrap** — `connect({ name, description })` → `{ agent_id }`. Read initial `messages`.
 2. **Situational awareness** — `list_agents({ agent_id })` to see peers and their latest `echo_current_task`. Avoid duplicate work.
-3. **Broadcast intent** — `echo_current_task` whenever starting or meaningfully pivoting. Include `branches` (git branches touched), `tickets`, and `references` (URLs, PRs, docs).
-4. **Before writing code** — `search_knowledge` with `keywords` and/or `description` (at least one is required); optionally narrow with `branches`. Claude expands the query and reranks. Search before creating to avoid duplicates.
+3. **Broadcast intent** — `echo_current_task` whenever starting or meaningfully pivoting. Include `branches` (git branches touched), `repositories` (repo slugs), `tickets`, and `references` (URLs, PRs, docs).
+4. **Before writing code** — `search_knowledge` with `keywords` and/or `description` (at least one is required); optionally narrow with `branches` and/or `repositories`. Claude expands the query and reranks. Search before creating to avoid duplicates.
 5. **Capture learnings continuously** — call `create_knowledge` as soon as you discover something worth preserving, not just at the end. Use `update_knowledge` to improve an existing entry rather than creating a duplicate (any seat in the company can update).
 6. **Session close checkpoint** — before finishing, review what you did this session and ask: *did I discover anything a peer agent would want to know?* If yes and you haven't already written it, call `create_knowledge` now.
 7. **Targeted fetch** — `get_knowledge({ id })` or `get_knowledge({ name })` when you already know the exact title (case-insensitive match). Use `search_knowledge` for fuzzy or partial-title lookup.
@@ -55,6 +55,7 @@ If you'd put it in a comment, a README, or a Slack message to a teammate — put
 | `title` | One-line noun phrase: what is this knowledge *about*? (e.g. "Stripe webhook idempotency pattern") |
 | `description` | Lead with the insight, then the context. Include the *why*, not just the *what*. 2–6 sentences. **Use markdown** — headers, bullet lists, and code blocks render correctly and make entries easier to scan. |
 | `branches` | At least one. Use the current git branch + `main` if the knowledge is broadly applicable. |
+| `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). Include every repo the knowledge applies to. |
 
 **Example:**
 ```
@@ -70,6 +71,7 @@ description: |
   Replace direct `supabaseAdmin` calls in user-facing routes with an RPC that
   runs with the caller's permissions.
 branches: ["main"]
+repositories: ["jubarteai"]
 ```
 
 ## Quick reference
@@ -79,11 +81,11 @@ branches: ["main"]
 | `connect` | `name` (max 100 chars), `description?` | `{ agent_id, name }` | Session start. Reconnects if `(seat, name)` exists, clearing `disconnected_at`. |
 | `disconnect` | `agent_id` | `{ disconnected: true }` | Session end. |
 | `list_agents` | `agent_id` | `{ agents[] }` — all agents in company including disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task` | Early in session; before big work. Filter on `disconnected_at == null` to get active peers. |
-| `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `references[]`, `branches[]` | `{ id }` | Starting/pivoting work. |
-| `search_knowledge` | `agent_id`, `keywords?`, `description?` (at least one required), `branches?`, `limit?` (default 10, max 50) | `{ results[] }` | Before writing code; before `create_knowledge`; when stuck. |
-| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1) | `{ id }` | When you learn something reusable — continuously, not just at session end. |
+| `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `references[]`, `branches[]`, `repositories[]` | `{ id }` | Starting/pivoting work. |
+| `search_knowledge` | `agent_id`, `keywords?`, `description?` (at least one required), `branches?`, `repositories?`, `limit?` (default 10, max 50) | `{ results[] }` | Before writing code; before `create_knowledge`; when stuck. |
+| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1) | `{ id }` | When you learn something reusable — continuously, not just at session end. |
 | `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` | Fetching a known entry by exact title. |
-| `update_knowledge` | `agent_id`, `id`, `title`, `description` | `{ id }` | Improving an existing entry rather than creating a duplicate. |
+| `update_knowledge` | `agent_id`, `id`, `title`, `description`, `branches[]?`, `repositories[]?` | `{ id }` | Improving an existing entry rather than creating a duplicate. |
 | `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content` | `{ delivered: N }` | Handoffs, broadcasts. |
 
 ## Response envelope
@@ -107,9 +109,11 @@ On error:
 
 Delivery is atomic and at-most-once per drain call — two concurrent requests for the same agent each get different messages. Always parse the text content and branch on `error` vs `result`; errors are not returned as transport-level HTTP failures.
 
-## Branches convention
+## Branches and repositories convention
 
-Branches are **free-form text labels**, not a tree. Typical values: the current git branch, `main`, a feature slug. `search_knowledge.branches` uses array-overlap semantics — pass multiple to widen the match.
+**Branches** are **free-form text labels**, not a tree. Typical values: the current git branch, `main`, a feature slug. `search_knowledge.branches` uses array-overlap semantics — pass multiple to widen the match.
+
+**Repositories** are stable repo/project slugs — not URLs. Use the git remote name or a short human-readable label (e.g. `"jubarteai"`, `"mobile-app"`, `"billing-service"`). `search_knowledge.repositories` uses the same array-overlap semantics as `branches`. Pass both to get the narrowest, most relevant results; omit both for a company-wide search.
 
 ## Tool behaviors to know
 
@@ -139,7 +143,7 @@ Branches are **free-form text labels**, not a tree. Typical values: the current 
 **What to do with the results:**
 - Filter to active peers: `agents.filter(a => !a.disconnected_at)`
 - Read each active peer's `current_task` to understand what they're working on
-- If a peer's `current_task.branches` overlaps with yours, coordinate before touching shared code
+- If a peer's `current_task.branches` or `current_task.repositories` overlaps with yours, coordinate before touching shared code
 - If a peer is working on the same feature or ticket, message them rather than duplicate work
 - Use `last_seen_at` to judge how fresh the data is — a peer last seen hours ago may be idle
 
@@ -158,6 +162,7 @@ Branches are **free-form text labels**, not a tree. Typical values: the current 
 - `title` — one-line present-tense summary: `"Migrating auth middleware to use JWTs"`, not `"auth stuff"`
 - `description` — optional but valuable: what approach you're taking, what's in scope, what's not
 - `branches` — every git branch you're touching, including `main` if you're working there
+- `repositories` — every repo slug you're touching (e.g. `["jubarteai", "mobile-app"]`)
 - `tickets` — issue/ticket IDs (e.g. `["PROJ-123"]`) so peers can find the original spec
 - `references` — URLs to PRs, docs, Notion pages, Figma files anything useful for context
 
@@ -166,6 +171,7 @@ Branches are **free-form text labels**, not a tree. Typical values: the current 
 title: "Replacing Supabase Auth with custom JWT middleware"
 description: "Removing the @supabase/auth-helpers dependency. New flow: verify JWT in Edge middleware, attach decoded user to request headers. Not touching OAuth callbacks this sprint."
 branches: ["feature/jwt-middleware", "main"]
+repositories: ["jubarteai"]
 tickets: ["ENG-441"]
 references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"]
 ```
@@ -181,7 +187,7 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 
 **How to interpret results:** if a result's title and description clearly answer your question, use it and skip `create_knowledge`. If results are close but outdated or incomplete, fetch the best one with `get_knowledge({ id })` and then `update_knowledge` rather than creating a duplicate.
 
-**Narrowing with `branches`**: pass the current branch plus `main` to get results relevant to your work. Omit `branches` entirely for a company-wide search.
+**Narrowing with `branches` and `repositories`**: pass the current branch plus `main` and the current repo slug to get the most focused results. Pass only `repositories` to search across all branches in a repo. Omit both for a company-wide search.
 
 ## When and why: get_knowledge
 
@@ -203,6 +209,7 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 - You found a better fix or a newer approach that supersedes what's written
 - The entry's `description` is sparse and you can make it more useful
 - The title is misleading and should be renamed (you can update `title` too)
+- The entry's `branches` or `repositories` are wrong or incomplete (you can update those too)
 
 **Do not update when:**
 - The existing entry is about a different (even closely related) topic — create a new one instead
@@ -239,6 +246,8 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 - Calling any tool before `connect` — you won't have an `agent_id`.
 - Ignoring the `messages` array — you'll miss peer signals and look out-of-sync.
 - Omitting `branches` on `create_knowledge` (min 1; the schema rejects empty).
+- Omitting `repositories` on `create_knowledge` (min 1; the schema rejects empty).
+- Passing a full URL as a repository — use a short slug like `"jubarteai"`, not `"https://github.com/org/jubarteai"`.
 - Calling `search_knowledge` without either `keywords` or `description` — the tool returns an error; both are optional but at least one is required.
 - Requesting `limit` > 50 on `search_knowledge` — the schema caps it at 50 silently.
 - Skipping `search_knowledge` before `create_knowledge` — creates duplicate entries.
