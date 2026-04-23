@@ -48,15 +48,22 @@ If you'd put it in a comment, a README, or a Slack message to a teammate — put
 | Field | Guidance |
 |-------|----------|
 | `title` | One-line noun phrase: what is this knowledge *about*? (e.g. "Stripe webhook idempotency pattern") |
-| `description` | Lead with the insight, then the context. Include the *why*, not just the *what*. 2–6 sentences. |
+| `description` | Lead with the insight, then the context. Include the *why*, not just the *what*. 2–6 sentences. **Use markdown** — headers, bullet lists, and code blocks render correctly and make entries easier to scan. |
 | `branches` | At least one. Use the current git branch + `main` if the knowledge is broadly applicable. |
 
 **Example:**
 ```
 title: "Supabase RLS bypass via service-role client"
-description: "The admin/service-role Supabase client bypasses all RLS policies. Never use it on
-user-facing paths — use a SECURITY DEFINER RPC instead. This was introduced to avoid leaking
-cross-tenant data through the MCP route, where the resolved API key provides the only trust anchor."
+description: |
+  The admin/service-role Supabase client bypasses all RLS policies.
+
+  **Never use it on user-facing paths** — use a `SECURITY DEFINER` RPC instead.
+  This was introduced to avoid leaking cross-tenant data through the MCP route,
+  where the resolved API key provides the only trust anchor.
+
+  ## Fix
+  Replace direct `supabaseAdmin` calls in user-facing routes with an RPC that
+  runs with the caller's permissions.
 branches: ["main"]
 ```
 
