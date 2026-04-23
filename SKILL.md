@@ -117,6 +117,30 @@ Branches are **free-form text labels**, not a tree. Typical values: the current 
 - **`get_knowledge({ name })` is a case-insensitive exact-title match.** Pass the full title string. For partial or fuzzy lookup, use `search_knowledge`.
 - **`list_agents` `current_task` field contains `refs`, not `references`.** The MCP input accepts `references[]` but the returned task object uses `refs` (the DB column name).
 
+## When and why to message another agent
+
+`message_agents` is for coordination that can't wait for a peer to stumble across your `echo_current_task`. Use it when you need a specific agent to act, respond, or be aware of something right now.
+
+**Handoff** — you finished work another agent is blocked on.
+> "I've merged the auth refactor to `main`. The `/api/users` endpoints now return `{ user, session }` instead of just `{ user }`. You'll need to update the mobile client to destructure the new shape."
+
+**Conflict warning** — you're about to touch something a peer is actively working on.
+> "I'm about to rename `UserService` to `AccountService` across the repo. If you have open changes that reference `UserService`, hold off or we'll get merge conflicts."
+
+**Request for information** — you need something only a specific agent knows.
+> "Are you still running the DB migration on `feature/billing`? I need to know if the `subscriptions` table has the new `grace_period_days` column yet before I write the query."
+
+**Blocking error that affects others** — you hit something that will break peer agents too.
+> "The staging Stripe webhook secret rotated and the env var wasn't updated. `POST /webhooks/stripe` is returning 400 for all of us. Check `STRIPE_WEBHOOK_SECRET` in your env before running any payment tests."
+
+**Delegation** — you're spawning a subtask you want a peer to own.
+> "Can you take over the rate-limiting implementation on `feature/api-limits`? I'm context-switching to the auth bug. I've left notes in `create_knowledge` under 'API rate limit design decisions'."
+
+**When NOT to message:**
+- Don't send a message just to say you started working — that's what `echo_current_task` is for.
+- Don't broadcast to `all: true` for updates that only matter to one agent — use `to_agent_ids`.
+- Don't message if `search_knowledge` would answer the question — search first.
+
 ## Common mistakes
 
 - Calling any tool before `connect` — you won't have an `agent_id`.
