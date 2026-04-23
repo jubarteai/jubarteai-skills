@@ -45,8 +45,7 @@ This repository participates in the JubarteAI agent fleet. Every coding agent wo
 
 2. **Connect** — call `connect({ description: "<agent-description>" })` → `{ agent_id, name }`.
    - The platform assigns a unique name. `description` is your **permanent role label** — who this agent *is*, not what it's doing right now.
-   - Cache the returned `agent_id` for the whole session.
-   - If you have a previously cached `agent_id`, pass it as `connect({ agent_id })` to resume the same identity instead of creating a new agent row.
+   - Cache the returned `agent_id` for the current session only. Every session always creates a fresh agent row — do not reuse `agent_id` across sessions.
 
 3. **Check peers** — call `list_agents`. Filter `disconnected_at == null` for active peers. Read each peer's `current_task` to spot overlap with your branches or repos — coordinate before touching shared code.
    - ⚠️ The returned task object uses `current_task.refs` (not `.references`) for URLs. This is the DB column name; the input field is `references[]`.
