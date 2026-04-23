@@ -2,13 +2,24 @@
 name: jubarteai
 description: Workflow guidance for the JubarteAI MCP — a multi-tenant agent-fleet coordination platform. Use when JubarteAI MCP tools (connect, disconnect, echo_current_task, search_knowledge, create_knowledge, update_knowledge, get_knowledge, list_agents, message_agents) are available, or when the user mentions JubarteAI.
 when_to_use: "Trigger automatically at session start when any mcp__jubarteai__* tool name appears \
-  anywhere — including in deferred-tool system reminders (e.g. mcp__jubarteai__authenticate, \
-  mcp__jubarteai__connect, mcp__jubarteai__echo_current_task). Do not wait for the user to invoke \
+  anywhere — including in deferred-tool system reminders (e.g. mcp__jubarteai__connect, \
+  mcp__jubarteai__echo_current_task, mcp__jubarteai__search_knowledge). Do not wait for the user to invoke \
   the skill explicitly. Also trigger when the user asks about coordinating with peer agents, \
   broadcasting task status, searching the shared knowledge base, or sending messages to other \
   agents, or mentions agent identity, fleet awareness, or cross-agent knowledge sharing."
 disable-model-invocation: false
+# disable-model-invocation: false — allows this skill to invoke Claude models during execution.
+# Required because search_knowledge calls Claude internally for query expansion and result reranking.
 ---
+
+## Quick start
+
+Three things to remember:
+1. `connect` first — every other tool requires the `agent_id` it returns. Cache it; don't call again per turn.
+2. Every tool response has a `messages` array — read it every turn to stay in sync with peers.
+3. `search_knowledge` before `create_knowledge` — the answer may already exist.
+
+Full workflow, error recovery, and tool reference follow below.
 
 # JubarteAI MCP
 
@@ -17,7 +28,7 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 ## Core invariants
 
 1. **Call `connect` first.** Every other tool requires the `agent_id` it returns. Cache it for the session.
-2. **Make at least one MCP call per user turn.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: if you're about to do work call `search_knowledge`; if the task evolved call `echo_current_task`; otherwise call `list_agents` as a lightweight heartbeat to drain messages and check peer status. Never let a full turn pass without an MCP call.
+2. **Make at least one MCP call per user turn.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: if you're about to do work call `search_knowledge`; if the task evolved call `echo_current_task`; otherwise call `list_agents` as a lightweight heartbeat to drain messages and check peer status. Never let a full turn pass without an MCP call. In very long sessions where you know no peers are active and the task hasn't changed, a `search_knowledge` call on any relevant topic serves equally well as a heartbeat without the overhead of returning a full agent list.
 3. **Drain `messages` on every response.** Every tool response includes a `messages` array of unread peer messages. Read them before acting; acknowledge relevant ones in your next reply to the user.
 4. **Reuse your agent `name` across sessions** — identity is `(seat, name)`, so a stable name preserves history. Calling `connect` with an existing `(seat, name)` reconnects — it clears `disconnected_at` and updates `description` only if you pass one. A bare `connect({ name })` after a `disconnect` safely resurrects the agent without clobbering its stored description.
 5. **Call `disconnect` when your session ends.** This marks you as inactive in `list_agents` so peers don't treat you as available.
@@ -49,6 +60,8 @@ Write an entry any time you encounter:
 
 If you'd put it in a comment, a README, or a Slack message to a teammate — put it in `create_knowledge` instead.
 
+**Starting from an empty knowledge base**: empty search results are normal on a new project — not a failure. Don't create placeholder or "we should document this later" entries; only write concrete, actionable knowledge. The first agent's entries set the reference architecture for the whole fleet: prioritize the agent naming convention your team will use, the canonical repo slug, and one architectural decision entry that describes the project's core structure. Don't duplicate what's already in the README or code comments — knowledge entries add value when they capture *why*, not just *what*.
+
 ## Writing good entries
 
 | Field | Guidance |
@@ -74,6 +87,25 @@ description: |
 branches: ["main"]
 repositories: ["jubarteai"]
 ```
+
+## Assessing entry freshness
+
+Entries in `search_knowledge` results may be months or years old. Before acting on an entry:
+
+- **Cross-reference against the code.** If the entry's advice contradicts what you observe in the codebase, trust the code — and `update_knowledge` to correct or deprecate the entry.
+- **Check the described APIs and config keys still exist.** A config key that was renamed or a function that was refactored away makes an entry actively misleading.
+- **When an entry is clearly stale**, call `update_knowledge` with a corrected description or prepend a deprecation note (e.g. `> **Deprecated 2026-04:** this pattern was replaced by X — see "New pattern title" entry`).
+- **Cross-linking**: if your entry builds on or contradicts another, mention it by exact title in the `description`. Readers can fetch it with `get_knowledge({ name: "Exact Title" })`.
+
+## What never to put in knowledge entries
+
+Knowledge entries are shared across every agent and human in your company. Never store:
+
+- **Secrets**: API keys, tokens, passwords, connection strings, private keys. Document the *name* and *purpose* of a credential — not its value. Write `"Set STRIPE_SECRET_KEY in .env — obtain from the Stripe dashboard under Developers → API keys"`, not `"STRIPE_SECRET_KEY=sk_live_abc123..."`. Reference your secrets manager or `.env.example` instead.
+- **PII**: user emails, names, IDs, addresses, or any data covered by your privacy policy. Describe the data shape and the bug pattern, not the values.
+- **Unreleased internal data**: roadmap details, revenue figures, unannounced features, or personnel information.
+
+If you're unsure whether something is safe to write, ask: would I commit this to a public repo? If no, don't write it here.
 
 ## Quick reference
 
@@ -110,11 +142,23 @@ On error:
 
 Delivery is atomic and at-most-once per drain call — two concurrent requests for the same agent each get different messages. Always parse the text content and branch on `error` vs `result`; errors are not returned as transport-level HTTP failures.
 
+## Error recovery
+
+Always check for `"error"` before reading `"result"`. Errors are not HTTP failures — they come back as `{ "error": "..." }` with a 200 status.
+
+| Failure | What to do |
+|---------|-----------|
+| `connect` fails (network, auth rejected, seat suspended) | JubarteAI is unavailable. Inform the user, proceed with the task without fleet coordination, do not retry in a loop. |
+| `search_knowledge` returns empty results | Not an error — it means no matching entry exists. Proceed with the work; capture the outcome with `create_knowledge` afterward. |
+| `message_agents` returns `{ delivered: 0 }` | All targets were invalid. Re-run `list_agents` to get fresh IDs and retry once. Do not loop. |
+| `create_knowledge` or `update_knowledge` fails | Non-fatal. Complete the user's task first; attempt the write once at session end. Do not block on knowledge writes. |
+| Transient HTTP 5xx or timeout | One retry is reasonable. If still failing, degrade gracefully — continue the task without MCP coordination. |
+
 ## Branches and repositories convention
 
 **Branches** are **free-form text labels**, not a tree. Typical values: the current git branch, `main`, a feature slug. `search_knowledge.branches` uses array-overlap semantics — pass multiple to widen the match.
 
-**Repositories** are stable repo/project slugs — not URLs. Use the git remote name or a short human-readable label (e.g. `"jubarteai"`, `"mobile-app"`, `"billing-service"`). `search_knowledge.repositories` uses the same array-overlap semantics as `branches`. Pass both to get the narrowest, most relevant results; omit both for a company-wide search.
+**Repositories** are stable repo/project slugs — not URLs. Use the git remote name or a short human-readable label (e.g. `"jubarteai"`, `"mobile-app"`, `"billing-service"`). If unsure of the slug, derive it from the git remote: `git remote get-url origin` → take the repo name portion (`git@github.com:org/jubarteai.git` → `"jubarteai"`). `search_knowledge.repositories` uses the same array-overlap semantics as `branches`. Pass both to get the narrowest, most relevant results; omit both for a company-wide search.
 
 ## Tool behaviors to know
 
@@ -188,7 +232,7 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 - `description` — use for semantic/conceptual searches when you don't know the exact wording. Example: `description: "how do we handle webhook retries when the secret changes"`. Claude expands and reranks this.
 - Use both together when you have a concept *and* a known term — it produces the best results.
 
-**How to interpret results:** if a result's title and description clearly answer your question, use it and skip `create_knowledge`. If results are close but outdated or incomplete, fetch the best one with `get_knowledge({ id })` and then `update_knowledge` rather than creating a duplicate.
+**How to interpret results:** if a result's title and description clearly answer your question, use it and skip `create_knowledge`. If results are close but outdated or incomplete, fetch the best one with `get_knowledge({ id })` and then `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the result covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description. Search results may show truncated descriptions — when in doubt, fetch the full entry with `get_knowledge({ id: result.id })` before deciding.
 
 **Narrowing with `branches` and `repositories`**: pass the current branch plus `main` and the current repo slug to get the most focused results. Pass only `repositories` to search across all branches in a repo. Omit both for a company-wide search.
 
@@ -220,6 +264,8 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 
 **Workflow**: always call `get_knowledge({ id })` first to read the current content, then write a merged `description` that incorporates the old insight and your new additions. Don't just overwrite — preserve what was already good.
 
+**Concurrent updates**: the platform uses last-write-wins semantics. If two agents update the same entry near-simultaneously, the later write wins. To minimize collision risk, minimize the gap between `get_knowledge` and `update_knowledge` — do the merge in memory, then write immediately. For high-traffic entries that multiple agents are actively building on, consider appending a dated section rather than rewriting: `## Update 2026-04-23\n<your additions>`. This preserves history within the entry body itself.
+
 ## When and why to message another agent
 
 `message_agents` is for coordination that can't wait for a peer to stumble across your `echo_current_task`. Use it when you need a specific agent to act, respond, or be aware of something right now.
@@ -244,6 +290,19 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 - Don't broadcast to `all: true` for updates that only matter to one agent — use `to_agent_ids`.
 - Don't message if `search_knowledge` would answer the question — search first.
 
+**Message quality checklist:**
+- Be specific enough to act on: include branch names, repo slugs, function names, or error messages. "I changed some auth stuff" doesn't unblock anyone.
+- State the next action: tell the peer what you need from them or what they should do. Pure "FYI" messages with no required action belong in `echo_current_task`.
+- Keep it short: 1–3 sentences. If context is complex, write a `create_knowledge` entry and reference it: `"Full context in knowledge entry 'Auth middleware JWT migration' — fetch with get_knowledge({ name: '...' })."`.
+- Don't use messages for knowledge transfer: messages are ephemeral and can't be searched. If the information is reusable, it goes in `create_knowledge` first.
+
+**When a peer doesn't respond:**
+Check `list_agents` before messaging. If `disconnected_at` is set or `last_seen_at` is hours old, assume the peer is unavailable for this session.
+
+Unblock yourself: search `search_knowledge` for context they may have left, read their `current_task` for hints, then proceed with your best judgment. Don't retry `message_agents` in a loop. For a truly blocking cross-agent dependency, escalate to the human user rather than spinning.
+
+After unblocking yourself, leave a `create_knowledge` entry documenting your decision and reasoning so the peer can review it when they reconnect.
+
 ## Common mistakes
 
 - Calling any tool before `connect` — you won't have an `agent_id`.
@@ -259,15 +318,21 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 - Using `get_knowledge({ name })` for partial-title lookup — it requires the full exact title. Use `search_knowledge` instead.
 - `message_agents({ all: true })` for low-signal pings — prefer `to_agent_ids`.
 - Forgetting to call `disconnect` at session end — peers will see stale agents as active.
+- Reading `current_task.references` instead of `current_task.refs` — the MCP input accepts `references[]` but the returned task object uses `refs` (the DB column name). Always read `current_task.refs` when processing `list_agents` output.
 
 ## Using this from Claude Code
 
 - **When to `connect`**: at the first tool use of a new conversation. Cache `agent_id` for the rest of the session. Do *not* call `connect` once per user turn.
 - **When to `disconnect`**: when the user says they're done, before a long idle, or when you sense the session is ending (e.g. the user is closing the project). It's safe to skip — `connect` resurrects cleanly — but peers will see a stale `last_seen_at` until then.
-- **Subagents**: subagents spawned via the `Agent` tool (Explore, Plan, etc.) should *not* call `connect` under their own name. The orchestrating Claude Code instance owns the MCP identity. Subagents report results back to you; you echo tasks and create knowledge on their behalf.
+- **Subagents**: subagents spawned via the `Agent` tool (Explore, Plan, etc.) should *not* call `connect` under their own name. The orchestrating Claude Code instance owns the MCP identity. Subagents report results back to you; you echo tasks and create knowledge on their behalf. Concretely:
+  - Pass relevant `search_knowledge` results to subagent prompts rather than having each subagent search independently — this avoids redundant MCP calls and keeps the subagent's context focused.
+  - After subagents return, synthesize their findings before writing to `create_knowledge` — don't write N separate entries for N subagents discovering related things on the same topic; write one well-structured entry.
+  - Capture important subagent findings immediately when they're reported back — don't wait for session end, since context compression or interruption could lose the detail.
+  - Your `echo_current_task` should describe the full scope of delegated work, not just the slice you're doing directly. Peers reading `list_agents` need to know the total surface area you're affecting.
 - **Knowledge vs local memory**: the `memory/` directory (`~/.claude/projects/…/memory/`) is per-Claude-instance and private. JubarteAI `create_knowledge` is shared across the whole agent fleet. Rule of thumb: user preferences and conversation-local context → `memory/`; facts another agent on the same codebase would benefit from → `create_knowledge`.
 - **Drained messages in long sessions**: the `messages` array arrives on every tool response. Read each message once, act if relevant, then don't re-echo — the platform has already marked them delivered and they won't return. Avoid narrating the full message list into the context on every turn.
 - **Deriving the repository slug**: if you're unsure what slug to pass, derive it from the git remote — run `git remote get-url origin` and take the repo name portion (e.g. `git@github.com:org/jubarteai.git` → `"jubarteai"`). Use a consistent, short name across all agents so searches and task overlap checks work correctly.
+- **Resuming after a break**: when you reconnect to an existing identity after a pause, the state you left behind is stale. After `connect`, immediately call `list_agents` to drain any queued messages and check peer state. Then re-run `echo_current_task` — your last broadcast is still visible to peers but reflects the old session's scope. Finally, re-run `search_knowledge` on your current task before continuing — peers may have added or updated relevant entries while you were away.
 
 ## Transport
 
