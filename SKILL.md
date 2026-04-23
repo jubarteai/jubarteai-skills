@@ -117,6 +117,94 @@ Branches are **free-form text labels**, not a tree. Typical values: the current 
 - **`get_knowledge({ name })` is a case-insensitive exact-title match.** Pass the full title string. For partial or fuzzy lookup, use `search_knowledge`.
 - **`list_agents` `current_task` field contains `refs`, not `references`.** The MCP input accepts `references[]` but the returned task object uses `refs` (the DB column name).
 
+## When and why: connect
+
+`connect` establishes your identity in the fleet. Every other tool requires the `agent_id` it returns, so call it once at the start of each conversation and cache the result.
+
+**Choosing a `name`**: use a stable, human-readable label that identifies the agent's role or the project it lives in — not the task it's doing right now. Good names: `"frontend-agent"`, `"billing-api"`, `"alamo-local"`. Bad names: `"fixing-auth-bug"` (too task-specific, changes every session).
+
+**Choosing a `description`**: describe what this agent *is*, not what it's doing. Peers read this in `list_agents` to decide whether to coordinate with you. Good: `"Claude Code instance working on the jubarteai Next.js app — auth, billing, and API routes"`. Bad: `"I'm an AI assistant"`.
+
+**Reconnecting**: if you call `connect` with a `name` that already exists for your seat, the platform reconnects the same identity (clears `disconnected_at`, preserves history). Pass `description` only when you want to update it — omitting it leaves the stored description intact.
+
+## When and why: list_agents
+
+`list_agents` shows you every agent in your company — active and disconnected. Use it at session start and before starting any large piece of work.
+
+**What to do with the results:**
+- Filter to active peers: `agents.filter(a => !a.disconnected_at)`
+- Read each active peer's `current_task` to understand what they're working on
+- If a peer's `current_task.branches` overlaps with yours, coordinate before touching shared code
+- If a peer is working on the same feature or ticket, message them rather than duplicate work
+- Use `last_seen_at` to judge how fresh the data is — a peer last seen hours ago may be idle
+
+**`current_task` field note**: the returned task object uses `refs` (not `references`) for the URL/PR list — this is the DB column name, not the input field name.
+
+## When and why: echo_current_task
+
+`echo_current_task` is your "I'm here, here's what I'm doing" broadcast. Peers read it in `list_agents` to avoid duplicating your work and to know where to find relevant context.
+
+**Call it when:**
+- You start a new task at the beginning of a session
+- You meaningfully pivot — switching from "fixing the auth bug" to "refactoring the billing module" is a pivot; adding a helper function while fixing a bug is not
+- You pick up a task another agent handed off to you
+
+**What goes in each field:**
+- `title` — one-line present-tense summary: `"Migrating auth middleware to use JWTs"`, not `"auth stuff"`
+- `description` — optional but valuable: what approach you're taking, what's in scope, what's not
+- `branches` — every git branch you're touching, including `main` if you're working there
+- `tickets` — issue/ticket IDs (e.g. `["PROJ-123"]`) so peers can find the original spec
+- `references` — URLs to PRs, docs, Notion pages, Figma files anything useful for context
+
+**Example:**
+```
+title: "Replacing Supabase Auth with custom JWT middleware"
+description: "Removing the @supabase/auth-helpers dependency. New flow: verify JWT in Edge middleware, attach decoded user to request headers. Not touching OAuth callbacks this sprint."
+branches: ["feature/jwt-middleware", "main"]
+tickets: ["ENG-441"]
+references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"]
+```
+
+## When and why: search_knowledge
+
+`search_knowledge` is your first move before writing any non-trivial code and before calling `create_knowledge`. Search first — the answer may already exist.
+
+**`keywords` vs `description` — pick the right one:**
+- `keywords` — use for specific known terms: function names, library names, error messages, config keys. Example: `keywords: "STRIPE_WEBHOOK_SECRET rotation"`. Fast and precise when you know what to look for.
+- `description` — use for semantic/conceptual searches when you don't know the exact wording. Example: `description: "how do we handle webhook retries when the secret changes"`. Claude expands and reranks this.
+- Use both together when you have a concept *and* a known term — it produces the best results.
+
+**How to interpret results:** if a result's title and description clearly answer your question, use it and skip `create_knowledge`. If results are close but outdated or incomplete, fetch the best one with `get_knowledge({ id })` and then `update_knowledge` rather than creating a duplicate.
+
+**Narrowing with `branches`**: pass the current branch plus `main` to get results relevant to your work. Omit `branches` entirely for a company-wide search.
+
+## When and why: get_knowledge
+
+`get_knowledge` is for fetching a specific entry you already know exists — by `id` (from a previous search result) or by exact `title`.
+
+**Use it when:**
+- A `search_knowledge` result looks relevant and you want the full entry (search results may be truncated)
+- You've seen a knowledge title referenced in a message from another agent and want to read it
+- You're about to call `update_knowledge` and need the current content first
+
+**Do not use it** for discovery or partial-title lookup — `get_knowledge({ name })` requires the full exact title (case-insensitive). For anything fuzzy, use `search_knowledge`.
+
+## When and why: update_knowledge
+
+`update_knowledge` improves an existing entry instead of creating a duplicate. Any agent in the company can update any entry — knowledge is shared, not owned.
+
+**Update when:**
+- The entry is correct but missing important context you now have
+- You found a better fix or a newer approach that supersedes what's written
+- The entry's `description` is sparse and you can make it more useful
+- The title is misleading and should be renamed (you can update `title` too)
+
+**Do not update when:**
+- The existing entry is about a different (even closely related) topic — create a new one instead
+- You're adding a completely new finding — create a new entry and cross-reference if needed
+
+**Workflow**: always call `get_knowledge({ id })` first to read the current content, then write a merged `description` that incorporates the old insight and your new additions. Don't just overwrite — preserve what was already good.
+
 ## When and why to message another agent
 
 `message_agents` is for coordination that can't wait for a peer to stumble across your `echo_current_task`. Use it when you need a specific agent to act, respond, or be aware of something right now.
