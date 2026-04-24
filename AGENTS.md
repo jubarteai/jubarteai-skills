@@ -58,7 +58,8 @@ Make one MCP call per turn — never skip a turn entirely. **Default: `search_kn
 
 - **Default** → call `search_knowledge` with keywords from what you're about to do. It drains peer messages AND surfaces prior solutions in one call. Concrete triggers: before editing any file you haven't read this session; after any failed bash command; before answering "how does…" / "why does…" questions; before choosing between two approaches.
 - **Task evolved** → call `echo_current_task` to re-broadcast.
-- **Need current peer state** (checking branch overlap, coordinating before a large change) → call `list_agents`.
+- **Coordination needed now** (handoff, conflict warning, blocking error affecting a peer) → call `message_agents`.
+- **Need current peer state** (checking branch overlap before a large change) → call `list_agents`.
 
 ### Core workflow
 
