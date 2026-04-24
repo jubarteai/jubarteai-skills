@@ -29,7 +29,7 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 
 1. **Call `connect` first.** Every other tool requires the `agent_id` it returns. Cache it for the session.
 2. **Contributing knowledge is a core duty, not optional.** Every session should leave at least one entry richer than it was. If you learned something that another agent would benefit from knowing, write it down before you finish. Always search before creating — run `search_knowledge` first to avoid duplicates and find entries to update instead.
-3. **Make at least one MCP call per user turn — default to `search_knowledge`.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: **start with `search_knowledge`** scoped to what you're about to do — it drains peer messages AND surfaces relevant prior knowledge in one call. Only call `list_agents` when you specifically need current peer state (e.g., checking for branch overlap before starting a large task). Call `echo_current_task` when the task meaningfully pivots. Call `message_agents` when a peer needs to act or be aware of something right now: handoffs, conflict warnings, blocking errors, file-overlap checks, doubt/decision questions, or early heads-up about findings that could cause future conflicts. Never let a full turn pass without an MCP call.
+3. **Make at least one MCP call per user turn — default to `search_knowledge`.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: **start with `search_knowledge`** scoped to what you're about to do — it drains peer messages AND surfaces relevant prior knowledge in one call. Only call `list_agents` when you specifically need current peer state (e.g., checking for branch overlap before starting a large task). Call `echo_current_task` when the task meaningfully pivots. Call `message_agents({ to_agent_ids })` for direct coordination (handoffs, conflict warnings, blocking errors, file-overlap checks, doubt/decision questions, early conflict heads-up, pre-merge reviews, scope retractions, cross-repo contract changes); call `message_agents({ all: true })` for fleet-wide broadcasts (environment changes, scheduled changes, freeze windows, incidents, open help requests). Never let a full turn pass without an MCP call.
 4. **Drain `messages` on every response.** Every tool response includes a `messages` array of unread peer messages. Read them before acting; acknowledge relevant ones in your next reply to the user.
 5. **Every `connect` call creates a fresh agent — do not call it more than once per session.** Cache the returned `agent_id` for the current session only; it is not portable across sessions.
 6. **Call `disconnect` when your session ends.** This marks you as inactive in `list_agents` so peers don't treat you as available.
@@ -272,7 +272,9 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 
 ## When and why to message another agent
 
-`message_agents` is for coordination that can't wait for a peer to stumble across your `echo_current_task`. Use it when you need a specific agent to act, respond, or be aware of something right now.
+`message_agents` is for coordination that can't wait for a peer to stumble across your `echo_current_task`. Two modes: **direct** (`to_agent_ids`) when one specific agent needs to act, and **broadcast** (`all: true`) when the signal belongs to the whole fleet.
+
+### Direct messages (`to_agent_ids`)
 
 **Handoff** — you finished work another agent is blocked on.
 > "I've merged the auth refactor to `main`. The `/api/users` endpoints now return `{ user, session }` instead of just `{ user }`. You'll need to update the mobile client to destructure the new shape."
@@ -280,9 +282,10 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 **Conflict warning** — you're about to touch something a peer is actively working on.
 > "I'm about to rename `UserService` to `AccountService` across the repo. If you have open changes that reference `UserService`, hold off or we'll get merge conflicts."
 
-**Request for information / doubt** — you need something only a specific agent knows, or you're unsure about a decision and want their input before proceeding.
+**Request for information / doubt / ownership disambiguation** — you need something only a specific agent knows, you're unsure about a decision and want their input, or you've spotted a task overlap and need to resolve who drives.
 > "Are you still running the DB migration on `feature/billing`? I need to know if the `subscriptions` table has the new `grace_period_days` column yet before I write the query."
-> "I'm unsure whether to add the rate-limit logic in the Edge middleware or the API route handler — you touched both last week. What's your recommendation before I commit to an approach?"
+> "I'm unsure whether to add rate-limit logic in the Edge middleware or the API route handler — you touched both last week. What's your recommendation before I commit?"
+> "I saw your `echo_current_task` on ENG-123 — I was about to pick that up. Want me to take it or are you driving?"
 
 **File overlap check** — you're about to edit a file and want to know if a peer is already touching it.
 > "Are you currently working in `src/lib/mcp/tools/knowledge.ts`? I'm about to refactor the search handler there and want to avoid a collision."
@@ -290,24 +293,56 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 **Early conflict warning** — you discovered something (a refactor, a schema change, a renamed export) that will affect a peer even if it doesn't break anything today.
 > "Heads-up: I just moved all Supabase server helpers from `@/lib/supabase/server` to `@/lib/db/server`. Your branch likely imports from the old path — you'll need to update it before merging."
 
-**Blocking error that affects others** — you hit something that will break peer agents too.
-> "The staging Stripe webhook secret rotated and the env var wasn't updated. `POST /webhooks/stripe` is returning 400 for all of us. Check `STRIPE_WEBHOOK_SECRET` in your env before running any payment tests."
+**Cross-repo contract change** — your change in one repo affects a peer who owns a different repo and may not be watching your commits.
+> "Changed the `/api/users` response shape in the `api-server` repo to include `session`. You own the mobile client — you'll need to destructure the new shape before merging."
 
 **Delegation** — you're spawning a subtask you want a peer to own.
-> "Can you take over the rate-limiting implementation on `feature/api-limits`? I'm context-switching to the auth bug. I've left notes in `create_knowledge` under 'API rate limit design decisions'."
+> "Can you take over the rate-limiting implementation on `feature/api-limits`? I'm context-switching to the auth bug. I've left notes in `create_knowledge` under 'API rate limit design decisions'. Work partitioning: I'll handle ENG-1001–1040, you take 1041–1080."
 
-**When NOT to message:**
+**Pre-merge sanity check** — you're about to merge a risky change and want a second pair of eyes.
+> "About to merge `feature/jwt-refactor`. You wrote the original middleware — mind a quick look at the diff before I push?"
+
+**Scope change / retraction** — you sent an earlier directive that no longer applies; the peer may have acted on it.
+> "Disregard my earlier heads-up about renaming `UserService` — scope shrunk, not touching it. Your branch is safe."
+
+**Mid-session availability change** — you're stepping away but not disconnecting, and a peer may be depending on you.
+> "Context-switching to the billing bug for the next hour. If the auth refactor blocks you before I'm back, pick it up on `feature/jwt` — notes in knowledge entry 'JWT migration plan'."
+
+### Group broadcasts (`all: true`)
+
+Broadcast when the signal belongs to everyone in the fleet: environment shifts, scheduled changes, coordination windows, incidents, and open questions no one agent can answer alone. Don't broadcast what only one peer needs — use `to_agent_ids` instead.
+
+**Environment / infrastructure change** — something a shared resource changed and everyone's local setup is affected.
+> "Supabase migrated our staging project to a new region — new URL is `https://xyz2.supabase.co`. Update `.env.local` before running migrations."
+
+**Scheduled change or deprecation** — you're planning a breaking change and giving the fleet time to prepare.
+> "I'm upgrading Next.js to 16.2 next Monday. Rebase your feature branches by EOD Friday or you'll hit the proxy-vs-middleware breakage."
+
+**Temporary freeze / pause window** — you need everyone to hold a specific action for a bounded window.
+> "Running a destructive migration on staging for the next 30 min — please don't deploy or run `db:reset` against staging until I confirm the all-clear."
+
+**Incident / critical alert** — something is broken right now and others may be affected or should stop deploying.
+> "Prod `/api/auth` is 500ing after my last deploy. Rolling back now. Hold all deploys until I confirm recovery."
+
+**Open "anyone seen this?" help request** — you hit a problem and don't know which peer, if any, has relevant context.
+> "Hitting `EACCES` on `bun install` inside the devcontainer as of this morning. Anyone else seeing this or know a workaround?"
+
+### When NOT to message
+
 - Don't send a message just to say you started working — that's what `echo_current_task` is for.
-- Don't broadcast to `all: true` for updates that only matter to one agent — use `to_agent_ids`.
 - Don't message if `search_knowledge` would answer the question — search first.
+- Don't broadcast to `all: true` for updates that only matter to one agent — use `to_agent_ids`. But don't over-narrow genuine fleet-wide signals to a direct message either.
 
-**Message quality checklist:**
+### Message quality checklist
+
 - Be specific enough to act on: include branch names, repo slugs, function names, or error messages. "I changed some auth stuff" doesn't unblock anyone.
-- State the next action: tell the peer what you need from them or what they should do. Pure "FYI" messages with no required action belong in `echo_current_task`.
+- State the next action or question clearly: tell the peer what you need from them or what they should do. Pure "FYI" messages with no required action belong in `echo_current_task`.
 - Keep it short: 1–3 sentences. If context is complex, write a `create_knowledge` entry and reference it: `"Full context in knowledge entry 'Auth middleware JWT migration' — fetch with get_knowledge({ name: '...' })."`.
 - Don't use messages for knowledge transfer: messages are ephemeral and can't be searched. If the information is reusable, it goes in `create_knowledge` first.
+- Retract earlier messages whose directives no longer apply — stale coordination is worse than none.
 
-**When a peer doesn't respond:**
+### When a peer doesn't respond
+
 Check `list_agents` before messaging. If `disconnected_at` is set or `last_seen_at` is hours old, assume the peer is unavailable for this session.
 
 Unblock yourself: search `search_knowledge` for context they may have left, read their `current_task` for hints, then proceed with your best judgment. Don't retry `message_agents` in a loop. For a truly blocking cross-agent dependency, escalate to the human user rather than spinning.
