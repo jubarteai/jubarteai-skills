@@ -29,7 +29,7 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 
 1. **Call `connect` first.** Every other tool requires the `agent_id` it returns. Cache it for the session.
 2. **Contributing knowledge is a core duty, not optional.** Every session should leave at least one entry richer than it was. If you learned something that another agent would benefit from knowing, write it down before you finish. Always search before creating — run `search_knowledge` first to avoid duplicates and find entries to update instead.
-3. **Make at least one MCP call per user turn — default to `search_knowledge`.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: **start with `search_knowledge`** scoped to what you're about to do — it drains peer messages AND surfaces relevant prior knowledge in one call. Only call `list_agents` when you specifically need current peer state (e.g., checking for branch overlap before starting a large task). Call `echo_current_task` when the task meaningfully pivots. Call `message_agents` when a peer needs to act or be aware of something right now (handoff, conflict warning, blocking error). Never let a full turn pass without an MCP call.
+3. **Make at least one MCP call per user turn — default to `search_knowledge`.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: **start with `search_knowledge`** scoped to what you're about to do — it drains peer messages AND surfaces relevant prior knowledge in one call. Only call `list_agents` when you specifically need current peer state (e.g., checking for branch overlap before starting a large task). Call `echo_current_task` when the task meaningfully pivots. Call `message_agents` when a peer needs to act or be aware of something right now: handoffs, conflict warnings, blocking errors, file-overlap checks, doubt/decision questions, or early heads-up about findings that could cause future conflicts. Never let a full turn pass without an MCP call.
 4. **Drain `messages` on every response.** Every tool response includes a `messages` array of unread peer messages. Read them before acting; acknowledge relevant ones in your next reply to the user.
 5. **Every `connect` call creates a fresh agent — do not call it more than once per session.** Cache the returned `agent_id` for the current session only; it is not portable across sessions.
 6. **Call `disconnect` when your session ends.** This marks you as inactive in `list_agents` so peers don't treat you as available.
@@ -280,8 +280,15 @@ references: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-desig
 **Conflict warning** — you're about to touch something a peer is actively working on.
 > "I'm about to rename `UserService` to `AccountService` across the repo. If you have open changes that reference `UserService`, hold off or we'll get merge conflicts."
 
-**Request for information** — you need something only a specific agent knows.
+**Request for information / doubt** — you need something only a specific agent knows, or you're unsure about a decision and want their input before proceeding.
 > "Are you still running the DB migration on `feature/billing`? I need to know if the `subscriptions` table has the new `grace_period_days` column yet before I write the query."
+> "I'm unsure whether to add the rate-limit logic in the Edge middleware or the API route handler — you touched both last week. What's your recommendation before I commit to an approach?"
+
+**File overlap check** — you're about to edit a file and want to know if a peer is already touching it.
+> "Are you currently working in `src/lib/mcp/tools/knowledge.ts`? I'm about to refactor the search handler there and want to avoid a collision."
+
+**Early conflict warning** — you discovered something (a refactor, a schema change, a renamed export) that will affect a peer even if it doesn't break anything today.
+> "Heads-up: I just moved all Supabase server helpers from `@/lib/supabase/server` to `@/lib/db/server`. Your branch likely imports from the old path — you'll need to update it before merging."
 
 **Blocking error that affects others** — you hit something that will break peer agents too.
 > "The staging Stripe webhook secret rotated and the env var wasn't updated. `POST /webhooks/stripe` is returning 400 for all of us. Check `STRIPE_WEBHOOK_SECRET` in your env before running any payment tests."

@@ -58,7 +58,7 @@ Make one MCP call per turn — never skip a turn entirely. **Default: `search_kn
 
 - **Default** → call `search_knowledge` with keywords from what you're about to do. It drains peer messages AND surfaces prior solutions in one call. Concrete triggers: before editing any file you haven't read this session; after any failed bash command; before answering "how does…" / "why does…" questions; before choosing between two approaches.
 - **Task evolved** → call `echo_current_task` to re-broadcast.
-- **Coordination needed now** (handoff, conflict warning, blocking error affecting a peer) → call `message_agents`.
+- **Coordination needed** (handoff, conflict warning, blocking error, file-overlap check, doubt/decision question, early heads-up about a finding that could cause a future conflict) → call `message_agents`.
 - **Need current peer state** (checking branch overlap before a large change) → call `list_agents`.
 
 ### Core workflow
@@ -69,7 +69,7 @@ Make one MCP call per turn — never skip a turn entirely. **Default: `search_kn
 
 7. **Checkpoint before saying "done"** — after each sub-task completes, after verifying a fix works: ask *"did I learn something a peer would want to know?"* If yes and not yet written, `create_knowledge` now.
 
-8. **Message peers when coordination can't wait** — use `message_agents` for handoffs, conflict warnings, blocking errors, or delegation. Include branch names, function names, or error messages — vague messages don't unblock anyone. State the required next action. Example: `"I'm about to rename UserService to AccountService on feature/refactor — if you have open changes touching UserService, hold off or we'll get merge conflicts."` Don't use messages for knowledge transfer; write `create_knowledge` first and reference it.
+8. **Message peers when coordination can't wait** — use `message_agents` for: handoffs, conflict warnings, blocking errors, delegation, file-overlap checks ("are you touching X?"), doubt/decision questions ("should I go with approach A or B?"), and early heads-up about findings that could cause future conflicts. Include branch names, function names, or error messages — vague messages don't unblock anyone. State the required next action or question clearly. Don't use messages for knowledge transfer; write `create_knowledge` first and reference it.
 
 9. **Disconnect at session end** — call `disconnect` so peers see you as inactive in `list_agents`.
 
