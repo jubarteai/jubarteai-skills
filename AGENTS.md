@@ -17,7 +17,7 @@ This file is a **copy-paste template** for teams installing the JubarteAI skill.
 | Placeholder | What to put | Example |
 |-------------|-------------|---------|
 | `<repo-slug>` | Repo name from your git remote, no URL, no `.git`. Run `git remote get-url origin` and take the last path segment. | `git@github.com:org/my-app.git` → `"my-app"` |
-| `<agent-description>` | One-line permanent role label. Peers read this in `list_agents`. The platform assigns a unique name automatically. | `"Claude Code on the myapp Next.js monorepo — auth, billing, and API"` |
+| `<agent-description>` | One-line **agent identity card** — who/what this agent *is* (which IDE/harness, which project, which surface area), not what it's working on. Peers read this in `list_agents` to know what kind of peer you are. The platform assigns a unique name automatically. | `"Claude Code (Cursor) on the myapp Next.js monorepo — auth, billing, and API"` or `"Claude Code CLI on macOS — DevOps and infra for api-server"` |
 
 **Step 4 — Multi-repo / monorepo?** If your agents touch multiple repos, pass all slugs: `repositories: ["api", "web", "docs"]`. For a monorepo with packages, use one slug for the whole repo or one per package — pick one convention and use it consistently across all agents.
 
@@ -35,6 +35,8 @@ This repository participates in the JubarteAI agent fleet. Every coding agent wo
 
 - Store secrets, API keys, tokens, passwords, or PII in knowledge entries — these are fleet-shared and visible to all agents and humans in your company. Document credential *names* and *purposes* only.
 - Call `connect` more than once per session — cache `agent_id` and reuse it.
+- Skip `echo_current_task` after `connect` — peers can't see what you're doing without it.
+- Put your current task in `connect.description` — that field is the agent's identity (IDE/harness, project, surface area). The current task goes in `echo_current_task`.
 - Skip `search_knowledge` before `create_knowledge` — always search first to avoid duplicates.
 - Let a full conversation turn pass without an MCP call — peer messages pile up unread.
 - Finish a task without running at least one `search_knowledge` on it — even one search often surfaces a useful prior entry or avoids duplicating work.
@@ -44,12 +46,12 @@ This repository participates in the JubarteAI agent fleet. Every coding agent wo
 1. **Invoke the `jubarteai` skill** — auto-triggers when any `mcp__jubarteai__*` tool name appears (including deferred ones in system reminders). If it doesn't auto-trigger, invoke it manually. Do not wait for the user to ask.
 
 2. **Connect** — call `connect({ description: "<agent-description>" })` → `{ agent_id, name }`.
-   - The platform assigns a unique name. `description` is your **permanent role label** — who this agent *is*, not what it's doing right now.
+   - The platform assigns a unique name. `description` is your **agent identity card** — which IDE/harness you run in (Claude Code in Cursor, VS Code Claude extension, Claude Code CLI on macOS, …), which project, which surface area you own. Not the current task.
    - Cache the returned `agent_id` for the current session only. Every session always creates a fresh agent row — do not reuse `agent_id` across sessions.
 
 3. **Check peers** — call `list_agents`. Filter `disconnected_at == null` for active peers. Read each peer's `current_task` to spot overlap with your branches or repos — coordinate before touching shared code.
 
-4. **Broadcast intent** — call `echo_current_task` with your current task. Always include `repositories: ["<repo-slug>"]` and the relevant `branches`. This is the only correct place for "what I'm doing right now" — not `connect.description`.
+4. **Broadcast your task — mandatory immediately after connect** — call `echo_current_task` *every session*, even if your task is small or "just exploring." Always include `repositories: ["<repo-slug>"]` and the relevant `branches`. Without this, peers see your row in `list_agents` with no `current_task` and have no way to know whether you're idle or about to touch their files. Re-call whenever the task meaningfully pivots. This is the only correct place for "what I'm doing right now" — never `connect.description`.
 
 ### Every user turn
 
