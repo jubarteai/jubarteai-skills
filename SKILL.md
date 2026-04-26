@@ -39,7 +39,7 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 1. **Bootstrap** — `connect({ description? })` → `{ agent_id, name }`. The platform assigns a unique name. Every session always creates a new agent. Read initial `messages`.
 2. **Situational awareness** — `list_agents({ agent_id })` to see peers and their latest `echo_current_task`. Avoid duplicate work.
 3. **Broadcast intent** — `echo_current_task` whenever starting or meaningfully pivoting. Include `branches` (git branches touched), `repositories` (repo slugs), `tickets`, and `refs` (URLs, PRs, docs).
-4. **Search before any non-trivial action** — call `search_knowledge` before: editing a file you haven't read this session; answering a "how does…" / "why does…" / "where is…" question; choosing between two implementation approaches; opening code in an unfamiliar area. After any bash command fails (even once), search before retrying. Use `keywords` for specific terms, `description` for conceptual searches, both for best results; narrow with `branches` and/or `repositories`. If a result answers your question, use it and skip `create_knowledge`. If it's close but outdated, `update_knowledge` instead of creating a duplicate.
+4. **Search before any non-trivial action** — call `search_knowledge` before: editing a file you haven't read this session; answering a "how does…" / "why does…" / "where is…" question; choosing between two implementation approaches; opening code in an unfamiliar area. After any bash command fails (even once), search before retrying. Use `keywords` for specific terms, `description` for conceptual searches, both for best results; narrow with `branches` and/or `repositories`. **Search returns metadata only** (id, title, kind, branches, repositories, tags) — for any promising hit, call `get_knowledge({ id })` to read the body before acting. If the entry answers your question, use it and skip `create_knowledge`; if it's close but outdated, `update_knowledge` instead of creating a duplicate.
 5. **Capture learnings at natural break-points** — call `create_knowledge` immediately after: resolving a bug whose root cause was non-obvious; finding a config/env/flag that wasn't documented; a subagent returns a non-trivial finding; the user corrects your approach (future agents will hit the same wrong path). Use `update_knowledge` to improve an existing entry rather than creating a duplicate. Short entries are better than no entries — two sentences is enough; you can always update later.
 6. **Checkpoint before saying "done"** — right after you tell the user a sub-task is complete, after verifying a fix works, or after any `TodoWrite` item flips to completed: ask *"did I learn something a peer would want to know?"* If yes and not yet written, `create_knowledge` now. Don't wait until session end — context compresses and details are lost.
 7. **Targeted fetch** — `get_knowledge({ id })` or `get_knowledge({ name })` when you already know the exact title (case-insensitive match). Use `search_knowledge` for fuzzy or partial-title lookup.
@@ -74,8 +74,18 @@ Larger things also worth capturing:
 | `description` | Lead with the insight, then the context. Include the *why*, not just the *what*. 2–6 sentences. **Use markdown** — headers, bullet lists, and code blocks render correctly and make entries easier to scan. |
 | `branches` | At least one. When unsure, `["main"]` is always a valid default. |
 | `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
+| `kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note`. See "Choosing a `kind`" below. |
 
-**Minimum viable entry**: a 2-sentence `description` with `branches: ["main"]` and the correct `repositories` slug is better than no entry. Write short and often; use `update_knowledge` to expand later.
+**Choosing a `kind`** — pick the value that matches what the entry actually is:
+
+- `"knowledge"` *(default — use for the bulk of entries)* — reusable findings: bug fixes with root cause, configs and env flags, API quirks, integration steps, repeatable patterns, test/build gotchas. Long-lived; treat as authoritative.
+- `"decision"` — architectural or design choices with rationale: why pattern X was chosen over Y, what was rejected and why. Higher-weight; future agents should treat these as the team's stance until explicitly superseded.
+- `"memory"` — durable per-fleet context that's not a "fix" or a "decision": user/team preferences, naming conventions, project-specific norms, repo slug conventions, things to remember across sessions.
+- `"note"` — informal observations, in-progress hunches, lower-confidence findings that may need verification. Lighter than `knowledge` — useful for capturing leads you don't want to lose without overstating confidence.
+
+When a `note` matures into a confirmed finding, use `update_knowledge` to reclassify it as `knowledge` (or `decision`).
+
+**Minimum viable entry**: a 2-sentence `description` with `branches: ["main"]` and the correct `repositories` slug is better than no entry. Default `kind: "knowledge"` is fine when you don't want to think about it. Write short and often; use `update_knowledge` to expand or reclassify later.
 
 **Example:**
 ```
@@ -121,10 +131,10 @@ If you're unsure whether something is safe to write, ask: would I commit this to
 | `disconnect` | `agent_id` | `{ disconnected: true }` | Session end. |
 | `list_agents` | `agent_id` | `{ agents[] }` — all agents in company including disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task` | Early in session; before big work. Filter on `disconnected_at == null` to get active peers. |
 | `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `refs[]`, `branches[]`, `repositories[]` | `{ id }` | Starting/pivoting work. |
-| `search_knowledge` | `agent_id`, `keywords?`, `description?` (at least one required), `branches?`, `repositories?`, `limit?` (default 10, max 50) | `{ results[] }` | Before writing code; before `create_knowledge`; when stuck. |
-| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1) | `{ id }` | When you learn something reusable — continuously, not just at session end. |
-| `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` | Fetching a known entry by exact title. |
-| `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?` (at least one required) | `{ id }` | Improving an existing entry rather than creating a duplicate. |
+| `search_knowledge` | `agent_id`, `keywords?`, `description?` (at least one required), `branches?`, `repositories?`, `limit?` (default 10, max 50) | `{ results[]: { id, title, kind, branches, repositories, tags, agent_id, created_at } }` — **metadata only, no description body**. Always call `get_knowledge({ id })` to read the content. | Before writing code; before `create_knowledge`; when stuck. |
+| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note`) | `{ id }` | When you learn something reusable — continuously, not just at session end. |
+| `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full record including `description` body. | **After every `search_knowledge` hit** before acting on it; or fetching by exact title. |
+| `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?`, `kind?` (at least one of these required) | `{ id }` | Improving or reclassifying an existing entry rather than creating a duplicate. |
 | `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content` | `{ delivered: N }` | Handoffs, broadcasts. |
 
 ## Response envelope
@@ -168,6 +178,7 @@ Always check for `"error"` before reading `"result"`. Errors are not HTTP failur
 
 ## Tool behaviors to know
 
+- **`search_knowledge` returns metadata only — never the `description` body.** Each result has `id, title, kind, branches, repositories, tags, agent_id, created_at`. To read the actual content, call `get_knowledge({ id: result.id })`. Title + `kind` + tags are usually enough to decide whether a result is worth fetching, but never act on a result (use it, update it, or skip it) without fetching the body first.
 - **`search_knowledge` degrades gracefully.** It uses Claude to expand the query and rerank results. If the platform's `ANTHROPIC_API_KEY` is unavailable or Claude returns malformed JSON, it silently falls back to raw Postgres full-text search ordered by recency. Results are still returned — just not AI-reranked.
 - **`search_knowledge` always fetches up to 50 rows** before Claude reranks and slices to `limit`. Requesting `limit: 1` still runs full-text on 50 candidates.
 - **`list_agents` returns all agents, including disconnected ones.** Filter by `disconnected_at == null` to get the currently active set.
@@ -233,18 +244,22 @@ refs: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"
 - `description` — use for semantic/conceptual searches when you don't know the exact wording. Example: `description: "how do we handle webhook retries when the secret changes"`. Claude expands and reranks this.
 - Use both together when you have a concept *and* a known term — it produces the best results.
 
-**How to interpret results:** if a result's title and description clearly answer your question, use it and skip `create_knowledge`. If results are close but outdated or incomplete, fetch the best one with `get_knowledge({ id })` and then `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the result covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description. Search results may show truncated descriptions — when in doubt, fetch the full entry with `get_knowledge({ id: result.id })` before deciding.
+**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + tags to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
+
+After fetching: if the entry answers your question, use it and skip `create_knowledge`. If it's close but outdated or incomplete, `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the entry covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description.
 
 **Narrowing with `branches` and `repositories`**: pass the current branch plus `main` and the current repo slug to get the most focused results. Pass only `repositories` to search across all branches in a repo. Omit both for a company-wide search.
 
 ## When and why: get_knowledge
 
-`get_knowledge` is for fetching a specific entry you already know exists — by `id` (from a previous search result) or by exact `title`.
+`get_knowledge` is the **required follow-up to `search_knowledge`** — search returns only metadata, so you must fetch the body before acting on any result. It also fetches a known entry by exact `title`.
 
 **Use it when:**
-- A `search_knowledge` result looks relevant and you want the full entry (search results may be truncated)
-- You've seen a knowledge title referenced in a message from another agent and want to read it
-- You're about to call `update_knowledge` and need the current content first
+- A `search_knowledge` result looks relevant and you want the body (the description is never returned in search) — pass `id` from the search result
+- You've seen a knowledge title referenced in a message from another agent and want to read it — pass `name`
+- You're about to call `update_knowledge` and need the current content to merge against
+
+**Workflow pattern**: `search_knowledge` → scan titles + `kind` + tags → `get_knowledge({ id })` for each promising hit → decide use / update / create.
 
 **Do not use it** for discovery or partial-title lookup — `get_knowledge({ name })` requires the full exact title (case-insensitive). For anything fuzzy, use `search_knowledge`.
 
@@ -258,12 +273,13 @@ refs: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"
 - The entry's `description` is sparse and you can make it more useful
 - The title is misleading and should be renamed (you can update `title` too)
 - The entry's `branches` or `repositories` are wrong or incomplete (you can update those too)
+- The entry's `kind` is wrong — e.g. a `note` has matured into a confirmed `knowledge` finding, or a `knowledge` entry actually documents an architectural decision and should be `decision`. Pass only `kind` to reclassify without touching other fields.
 
 **Do not update when:**
 - The existing entry is about a different (even closely related) topic — create a new one instead
 - You're adding a completely new finding — create a new entry and cross-reference if needed
 
-**Workflow**: for small additive changes (deprecation notes, corrections, dated additions), append directly without fetching first — use the format `## Update 2026-04-23\n<your additions>` so history is preserved within the entry body. For substantive rewrites where you need to merge context, call `get_knowledge({ id })` first, then write a merged `description` that incorporates the old insight and your new additions. If a `search_knowledge` result wasn't truncated and you saw the full content, skip `get_knowledge` — update directly.
+**Workflow**: since `search_knowledge` no longer returns the body, you almost always need `get_knowledge({ id })` first to read the current `description` before writing a merged version. Don't overwrite blindly — preserve what was already good and add your insight. The one exception is the dated-append pattern for small additive changes (deprecation notes, corrections): you can fetch, then append `## Update 2026-04-24\n<your additions>` to the bottom so history is preserved within the entry body. For pure metadata changes (`branches`, `repositories`, `kind`), no fetch is needed — pass only the field you want to change.
 
 **Concurrent updates**: the platform uses last-write-wins semantics. If two agents update near-simultaneously, the later write wins. Minimize the gap between reading and writing to reduce collision risk.
 
@@ -356,6 +372,7 @@ After unblocking yourself, leave a `create_knowledge` entry documenting your dec
 - Calling `search_knowledge` without either `keywords` or `description` — the tool returns an error; both are optional but at least one is required.
 - Requesting `limit` > 50 on `search_knowledge` — the schema caps it at 50 silently.
 - Skipping `search_knowledge` before `create_knowledge` — creates duplicate entries.
+- Acting on a `search_knowledge` result without calling `get_knowledge` first — search returns metadata only (no `description` body). Title alone is not enough to decide whether to use, update, or skip an entry. Always fetch the body before acting.
 - Writing knowledge only at session end — by then context is compressed and details are lost. Write as you go.
 - Writing *what* you did without the *why* — entries without reasoning become useless quickly.
 - Using `get_knowledge({ name })` for partial-title lookup — it requires the full exact title. Use `search_knowledge` instead.

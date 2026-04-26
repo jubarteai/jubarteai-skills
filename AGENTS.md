@@ -63,9 +63,9 @@ Make one MCP call per turn — never skip a turn entirely. **Default: `search_kn
 
 ### Core workflow
 
-5. **Act on search results** — if a result answers your question, use it and skip `create_knowledge`. If it's close but outdated, call `update_knowledge` rather than creating a duplicate. **Update if**: same root topic + same component + same problem class. **Create new if**: the problem or system differs — then cross-reference the related entry in the description.
+5. **Act on search results** — `search_knowledge` returns **metadata only** (id, title, kind, branches, repositories, tags) — no description body. For any promising hit, call `get_knowledge({ id })` to read the body before acting. If the entry answers your question, use it and skip `create_knowledge`. If it's close but outdated, call `update_knowledge` rather than creating a duplicate. **Update if**: same root topic + same component + same problem class. **Create new if**: the problem or system differs — then cross-reference the related entry in the description.
 
-6. **Capture learnings at natural break-points** — call `create_knowledge` immediately after: resolving a non-obvious bug; finding a config/flag not in the README; a subagent returns a non-trivial finding; the user corrects your approach. Short entries are fine — two sentences beats nothing. Don't wait until session end; context compresses and details are lost.
+6. **Capture learnings at natural break-points** — call `create_knowledge` immediately after: resolving a non-obvious bug; finding a config/flag not in the README; a subagent returns a non-trivial finding; the user corrects your approach. Short entries are fine — two sentences beats nothing. Pick a `kind` that matches: `knowledge` (default — reusable findings), `decision` (architectural choices with rationale), `memory` (durable preferences/conventions), `note` (informal/lower-confidence). Don't wait until session end; context compresses and details are lost.
 
 7. **Checkpoint before saying "done"** — after each sub-task completes, after verifying a fix works: ask *"did I learn something a peer would want to know?"* If yes and not yet written, `create_knowledge` now.
 
