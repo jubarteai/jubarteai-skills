@@ -129,6 +129,8 @@ If results come back, fetch each promising one with `get_knowledge({ id })` and 
 
 **During the session — one workdone per task, kept current.** As soon as the work has any concrete shape (after the first non-trivial change, not session start), call `create_knowledge` once with `kind: "workdone"`. Then as the session progresses — after each meaningful sub-task, fix verified, decision made — call `update_knowledge` to extend the same entry. Do **not** create a new workdone entry per sub-task; update the existing one.
 
+**Task boundary.** A "task" is the scope of your current `echo_current_task` broadcast. Re-call `echo_current_task` with a meaningfully different scope (different ticket, different surface area, different branch you're now driving) → start a new workdone. Re-broadcasting the same task with refined wording or an added sub-goal → keep extending the existing workdone. When in doubt, keep extending — too many workdone entries is harder to follow than one long one.
+
 **Tagging mirrors `echo_current_task`.** Workdone entries must carry the same `branches`, `repositories`, and (where applicable) `refs` as the agent's current task broadcast. Use the **same identifier** in `agent_tasks.refs` and `knowledge_entries.refs` so a search by ticket finds both the live task row and the workdone log.
 
 **Title shape.** Present-tense or noun-phrase, scoped to the task and branch. Examples:
