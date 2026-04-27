@@ -39,12 +39,14 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 1. **Bootstrap** — `connect({ description })` → `{ agent_id, name }`. The platform assigns a unique name. Every session always creates a new agent. `description` is the agent's **identity card** (which IDE/harness, which project, which surface area) — not the current task. Read initial `messages`.
 2. **Situational awareness** — `list_agents({ agent_id })` to see peers and their latest `echo_current_task`. Avoid duplicate work.
 3. **Broadcast intent — mandatory immediately after `connect`** — call `echo_current_task` *every session*, even if your task is "just exploring." Without it, your row in `list_agents` shows no `current_task` and peers can't tell whether you're idle or about to touch their files. Re-call whenever you meaningfully pivot. Include `title`, `branches` (git branches touched), `repositories` (repo slugs), and where relevant `tickets` and `refs` (URLs, PRs, docs).
-4. **Search before any non-trivial action** — call `search_knowledge` before: editing a file you haven't read this session; answering a "how does…" / "why does…" / "where is…" question; choosing between two implementation approaches; opening code in an unfamiliar area. After any bash command fails (even once), search before retrying. Use `keywords` for specific terms, `description` for conceptual searches, both for best results; narrow with `branches` and/or `repositories`. **Search returns metadata only** (id, title, kind, branches, repositories, tags) — for any promising hit, call `get_knowledge({ id })` to read the body before acting. If the entry answers your question, use it and skip `create_knowledge`; if it's close but outdated, `update_knowledge` instead of creating a duplicate.
-5. **Capture learnings at natural break-points** — call `create_knowledge` immediately after: resolving a bug whose root cause was non-obvious; finding a config/env/flag that wasn't documented; a subagent returns a non-trivial finding; the user corrects your approach (future agents will hit the same wrong path). Use `update_knowledge` to improve an existing entry rather than creating a duplicate. Short entries are better than no entries — two sentences is enough; you can always update later.
-6. **Checkpoint before saying "done"** — right after you tell the user a sub-task is complete, after verifying a fix works, or after any `TodoWrite` item flips to completed: ask *"did I learn something a peer would want to know?"* If yes and not yet written, `create_knowledge` now. Don't wait until session end — context compresses and details are lost.
-7. **Targeted fetch** — `get_knowledge({ id })` or `get_knowledge({ name })` when you already know the exact title (case-insensitive match). Use `search_knowledge` for fuzzy or partial-title lookup.
-8. **Coordinate** — `message_agents({ to_agent_ids, content })` for handoffs; `message_agents({ all: true, content })` for company-wide broadcasts. Use sparingly.
-9. **Wrap up** — `disconnect({ agent_id })` at end of session so peers see you as inactive in `list_agents`.
+4. **Workdone search — required before touching code on an in-flight branch/ticket** — run `search_knowledge({ agent_id, kind: "workdone", branches, repositories, refs })` to surface prior work logs. If results come back, `get_knowledge` each promising one before doing any work — a peer (or your past self) may have already done part of it, hit and resolved a blocker, or made a decision you need to honor. See "The workdone protocol" for full details.
+5. **Search before any non-trivial action** — call `search_knowledge` before: editing a file you haven't read this session; answering a "how does…" / "why does…" / "where is…" question; choosing between two implementation approaches; opening code in an unfamiliar area. After any bash command fails (even once), search before retrying. Use `keywords` for specific terms, `description` for conceptual searches, both for best results; narrow with `branches` and/or `repositories`. **Search returns metadata only** (id, title, kind, branches, repositories, tags) — for any promising hit, call `get_knowledge({ id })` to read the body before acting. If the entry answers your question, use it and skip `create_knowledge`; if it's close but outdated, `update_knowledge` instead of creating a duplicate.
+6. **Maintain one workdone entry per task** — once the work has concrete shape (after the first non-trivial change), `create_knowledge({ kind: "workdone", … })` once with the same `branches`/`repositories`/`refs` as your `echo_current_task`. As the session progresses, `update_knowledge` to extend the same entry — do not create a new workdone per sub-task.
+7. **Capture learnings at natural break-points** — call `create_knowledge` immediately after: resolving a bug whose root cause was non-obvious; finding a config/env/flag that wasn't documented; a subagent returns a non-trivial finding; the user corrects your approach (future agents will hit the same wrong path). Use `update_knowledge` to improve an existing entry rather than creating a duplicate. Short entries are better than no entries — two sentences is enough; you can always update later. Reusable findings (root causes, patterns, configs) belong in their own `kind: "knowledge"` entries — keep workdone as the session-log index and cross-link.
+8. **Checkpoint before saying "done"** — right after you tell the user a sub-task is complete, after verifying a fix works, or after any `TodoWrite` item flips to completed: ask *"did I learn something a peer would want to know?"* If yes and not yet written, `create_knowledge` (or `update_knowledge` your workdone) now. Don't wait until session end — context compresses and details are lost.
+9. **Targeted fetch** — `get_knowledge({ id })` or `get_knowledge({ name })` when you already know the exact title (case-insensitive match). Use `search_knowledge` for fuzzy or partial-title lookup.
+10. **Coordinate** — `message_agents({ to_agent_ids, content })` for handoffs; `message_agents({ all: true, content })` for company-wide broadcasts. Use sparingly.
+11. **Wrap up** — make a final `update_knowledge` to your workdone entry summarizing what's verified, what's open, and the next obvious step so the agent who picks this up has everything they need. Then `disconnect({ agent_id })` at end of session so peers see you as inactive in `list_agents`.
 
 ## What to capture as knowledge
 
@@ -75,7 +77,7 @@ Larger things also worth capturing:
 | `branches` | At least one. When unsure, `["main"]` is always a valid default. |
 | `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
 | `refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
-| `kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note`. See "Choosing a `kind`" below. |
+| `kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`. See "Choosing a `kind`" below. |
 
 **Choosing a `kind`** — pick the value that matches what the entry actually is:
 
@@ -83,6 +85,7 @@ Larger things also worth capturing:
 - `"decision"` — architectural or design choices with rationale: why pattern X was chosen over Y, what was rejected and why. Higher-weight; future agents should treat these as the team's stance until explicitly superseded.
 - `"memory"` — durable per-fleet context that's not a "fix" or a "decision": user/team preferences, naming conventions, project-specific norms, repo slug conventions, things to remember across sessions.
 - `"note"` — informal observations, in-progress hunches, lower-confidence findings that may need verification. Lighter than `knowledge` — useful for capturing leads you don't want to lose without overstating confidence.
+- `"workdone"` — per-session/per-task work log. The agent creates one workdone entry early and updates it as the session progresses. Future agents searching the same branch/repository/refs use these entries for handoffs, follow-up work, and conflict resolution. Tag with the same `branches` / `repositories` / `refs` as your `echo_current_task` so the entry is rediscoverable by every dimension. Distinct from `knowledge` (reusable findings) — workdone is a session log, not an encyclopedia entry. See "The workdone protocol" below.
 
 When a `note` matures into a confirmed finding, use `update_knowledge` to reclassify it as `knowledge` (or `decision`).
 
@@ -105,6 +108,54 @@ branches: ["main"]
 repositories: ["jubarteai"]
 refs: ["ENG-441", "https://github.com/org/jubarteai/pull/88"]
 ```
+
+## The workdone protocol
+
+Workdone entries are how the fleet maintains continuity across sessions. They're the primary mechanism for picking up an in-flight branch, resolving merge conflicts, and avoiding duplicate work. Treat them with the same priority as `echo_current_task`.
+
+**At session start — before touching code.** Once you have an `agent_id` and have called `echo_current_task`, run a workdone search scoped to the current task:
+
+```ts
+search_knowledge({
+  agent_id,
+  kind: "workdone",
+  branches: ["<current-branch>", "main"],
+  repositories: ["<current-repo>"],
+  refs: ["<ticket-id>"], // when applicable
+})
+```
+
+If results come back, fetch each promising one with `get_knowledge({ id })` and read it before doing any work. **This search is required when picking up an in-flight branch or ticket** — same status as the existing "search before non-trivial action" rule. A peer (or your past self) may have already done part of the work, hit and resolved a blocker, or made a decision you need to honor.
+
+**During the session — one workdone per task, kept current.** As soon as the work has any concrete shape (after the first non-trivial change, not session start), call `create_knowledge` once with `kind: "workdone"`. Then as the session progresses — after each meaningful sub-task, fix verified, decision made — call `update_knowledge` to extend the same entry. Do **not** create a new workdone entry per sub-task; update the existing one.
+
+**Tagging mirrors `echo_current_task`.** Workdone entries must carry the same `branches`, `repositories`, and (where applicable) `refs` as the agent's current task broadcast. Use the **same identifier** in `agent_tasks.refs` and `knowledge_entries.refs` so a search by ticket finds both the live task row and the workdone log.
+
+**Title shape.** Present-tense or noun-phrase, scoped to the task and branch. Examples:
+- `"Workdone: JWT middleware migration on feature/jwt"`
+- `"Workdone: Stripe seat-quantity sync rewrite on main"`
+- `"Workdone: ENG-441 auth refactor"`
+
+**Body shape.** Append-only-style updates ordered by time. Each update is a short bullet: what changed, where, what's verified, what's left. Reads like a session log, not a polished encyclopedia entry.
+
+**Example:**
+
+```
+title: "Workdone: JWT middleware migration on feature/jwt"
+description: |
+  Session 2026-04-27 (Claude Code, Cursor):
+  - Replaced @supabase/auth-helpers in src/proxy.ts with custom JWT verification.
+  - Updated /api/users to return { user, session }; mobile client not yet updated.
+  - Verified: signed-in flow works locally; sign-out clears the cookie.
+  - Open: OAuth callback path still using the old helper — needs migration in next session.
+  - Decision recorded as separate kind: "decision" entry "JWT middleware: HS256 vs RS256".
+branches: ["feature/jwt", "main"]
+repositories: ["jubarteai"]
+refs: ["ENG-441", "https://github.com/org/jubarteai/pull/88"]
+kind: "workdone"
+```
+
+**When to write a separate `kind: "knowledge"` entry instead.** Workdone is the *index* — what happened, in order, scoped to the task. The encyclopedia entries (root causes, configs, repeatable patterns, gotchas) belong in their own `kind: "knowledge"` (or `decision`/`memory`/`note`) entries. Cross-link from the workdone body by exact title so a future reader can fetch the deep dive.
 
 ## Assessing entry freshness
 
@@ -133,10 +184,10 @@ If you're unsure whether something is safe to write, ask: would I commit this to
 | `disconnect` | `agent_id` | `{ disconnected: true }` | Session end. |
 | `list_agents` | `agent_id` | `{ agents[] }` — all agents in company including disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task` | Early in session; before big work. Filter on `disconnected_at == null` to get active peers. |
 | `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `refs[]`, `branches[]`, `repositories[]` | `{ id }` | Starting/pivoting work. |
-| `search_knowledge` | `agent_id`, `keywords?`, `description?`, `branches?`, `repositories?`, `refs?`, `limit?` (default 10, max 50) — **at least one of keywords/description/branches/repositories/refs required** | `{ results[]: { id, title, kind, branches, repositories, refs, tags, agent_id, created_at } }` — **metadata only, no description body**. Always call `get_knowledge({ id })` to read the content. | Before writing code; before `create_knowledge`; when stuck. |
-| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `refs[]?` (default `[]` — ticket IDs / issue or PR URLs), `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note`) | `{ id }` | When you learn something reusable — continuously, not just at session end. |
+| `search_knowledge` | `agent_id`, `keywords?`, `description?`, `branches?`, `repositories?`, `refs?`, `kind?` (filter — single value), `limit?` (default 10, max 50) — **at least one of keywords/description/branches/repositories/refs/kind required** | `{ results[]: { id, title, kind, branches, repositories, refs, tags, agent_id, created_at } }` — **metadata only, no description body**. Always call `get_knowledge({ id })` to read the content. | Before writing code; before `create_knowledge`; when stuck. Use `kind: "workdone"` plus `branches`/`repositories`/`refs` at session start to find prior work logs. |
+| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `refs[]?` (default `[]` — ticket IDs / issue or PR URLs), `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`) | `{ id }` | When you learn something reusable — continuously, not just at session end. Also: create one `workdone` entry per task and update it as you go. |
 | `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full record including `description` body and `refs`. | **After every `search_knowledge` hit** before acting on it; or fetching by exact title. |
-| `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?`, `refs[]?`, `kind?` (at least one of these required) | `{ id }` | Improving or reclassifying an existing entry rather than creating a duplicate. |
+| `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?`, `refs[]?`, `kind?` (one of `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`; at least one of these fields required) | `{ id }` | Improving or reclassifying an existing entry rather than creating a duplicate. Use this to keep your `workdone` entry current as the session progresses. |
 | `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content` | `{ delivered: N }` | Handoffs, broadcasts. |
 
 ## Response envelope
@@ -271,7 +322,14 @@ refs: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"
 - `description` — use for semantic/conceptual searches when you don't know the exact wording. Example: `description: "how do we handle webhook retries when the secret changes"`. Claude expands and reranks this.
 - Use both together when you have a concept *and* a known term — it produces the best results.
 
-**Metadata-only searches** are also valid — pass any combination of `branches`, `repositories`, and/or `refs` with no `keywords`/`description` at all. Examples: `search_knowledge({ agent_id, refs: ["ENG-441"] })` to find every entry linked to a ticket; `search_knowledge({ agent_id, repositories: ["jubarteai"], branches: ["main"] })` to browse a repo's main-branch knowledge. With no text query, results are ordered by `created_at desc` and Claude rerank is skipped (faster, no AI cost). At least one of `keywords | description | branches | repositories | refs` is required.
+**Metadata-only searches** are also valid — pass any combination of `branches`, `repositories`, `refs`, and/or `kind` with no `keywords`/`description` at all. Examples:
+
+- `search_knowledge({ agent_id, refs: ["ENG-441"] })` — every entry linked to a ticket.
+- `search_knowledge({ agent_id, repositories: ["jubarteai"], branches: ["main"] })` — browse a repo's main-branch knowledge.
+- `search_knowledge({ agent_id, kind: "workdone", branches: ["feature/foo"] })` — prior work logs on a branch (the **session-start workdone search**, see "The workdone protocol").
+- `search_knowledge({ agent_id, kind: "decision" })` — every architectural decision in the company.
+
+With no text query, results are ordered by `created_at desc` and Claude rerank is skipped (faster, no AI cost). At least one of `keywords | description | branches | repositories | refs | kind` is required.
 
 **How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + tags to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
 
@@ -400,7 +458,10 @@ After unblocking yourself, leave a `create_knowledge` entry documenting your dec
 - Omitting `branches` on `create_knowledge` (min 1; the schema rejects empty).
 - Omitting `repositories` on `create_knowledge` (min 1; the schema rejects empty).
 - Passing a full URL as a repository — use a short slug like `"jubarteai"`, not `"https://github.com/org/jubarteai"`.
-- Calling `search_knowledge` with no filter at all — at least one of `keywords`, `description`, `branches`, `repositories`, or `refs` is required. Metadata-only searches (just `refs` or just `repositories`) are valid and useful.
+- Calling `search_knowledge` with no filter at all — at least one of `keywords`, `description`, `branches`, `repositories`, `refs`, or `kind` is required. Metadata-only searches (just `refs`, just `repositories`, just `kind`, or any combination) are valid and useful.
+- Skipping the workdone search at session start when picking up an in-flight branch or ticket — you'll redo work or hit conflicts a peer already resolved. Run `search_knowledge({ kind: "workdone", branches, repositories, refs })` before touching code.
+- Writing N workdone entries per session instead of one — update the existing entry as work progresses, don't create new ones for each sub-task.
+- Putting reusable findings (root causes, patterns, configs) in a workdone entry — those belong in a separate `kind: "knowledge"` entry; workdone is a session log, not an encyclopedia.
 - Requesting `limit` > 50 on `search_knowledge` — the schema caps it at 50 silently.
 - Skipping `search_knowledge` before `create_knowledge` — creates duplicate entries.
 - Acting on a `search_knowledge` result without calling `get_knowledge` first — search returns metadata only (no `description` body). Title alone is not enough to decide whether to use, update, or skip an entry. Always fetch the body before acting.
