@@ -74,6 +74,7 @@ Larger things also worth capturing:
 | `description` | Lead with the insight, then the context. Include the *why*, not just the *what*. 2–6 sentences. **Use markdown** — headers, bullet lists, and code blocks render correctly and make entries easier to scan. |
 | `branches` | At least one. When unsure, `["main"]` is always a valid default. |
 | `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
+| `refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
 | `kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note`. See "Choosing a `kind`" below. |
 
 **Choosing a `kind`** — pick the value that matches what the entry actually is:
@@ -102,6 +103,7 @@ description: |
   runs with the caller's permissions.
 branches: ["main"]
 repositories: ["jubarteai"]
+refs: ["ENG-441", "https://github.com/org/jubarteai/pull/88"]
 ```
 
 ## Assessing entry freshness
@@ -131,10 +133,10 @@ If you're unsure whether something is safe to write, ask: would I commit this to
 | `disconnect` | `agent_id` | `{ disconnected: true }` | Session end. |
 | `list_agents` | `agent_id` | `{ agents[] }` — all agents in company including disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task` | Early in session; before big work. Filter on `disconnected_at == null` to get active peers. |
 | `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `refs[]`, `branches[]`, `repositories[]` | `{ id }` | Starting/pivoting work. |
-| `search_knowledge` | `agent_id`, `keywords?`, `description?` (at least one required), `branches?`, `repositories?`, `limit?` (default 10, max 50) | `{ results[]: { id, title, kind, branches, repositories, tags, agent_id, created_at } }` — **metadata only, no description body**. Always call `get_knowledge({ id })` to read the content. | Before writing code; before `create_knowledge`; when stuck. |
-| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note`) | `{ id }` | When you learn something reusable — continuously, not just at session end. |
-| `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full record including `description` body. | **After every `search_knowledge` hit** before acting on it; or fetching by exact title. |
-| `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?`, `kind?` (at least one of these required) | `{ id }` | Improving or reclassifying an existing entry rather than creating a duplicate. |
+| `search_knowledge` | `agent_id`, `keywords?`, `description?`, `branches?`, `repositories?`, `refs?`, `limit?` (default 10, max 50) — **at least one of keywords/description/branches/repositories/refs required** | `{ results[]: { id, title, kind, branches, repositories, refs, tags, agent_id, created_at } }` — **metadata only, no description body**. Always call `get_knowledge({ id })` to read the content. | Before writing code; before `create_knowledge`; when stuck. |
+| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `refs[]?` (default `[]` — ticket IDs / issue or PR URLs), `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note`) | `{ id }` | When you learn something reusable — continuously, not just at session end. |
+| `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full record including `description` body and `refs`. | **After every `search_knowledge` hit** before acting on it; or fetching by exact title. |
+| `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?`, `refs[]?`, `kind?` (at least one of these required) | `{ id }` | Improving or reclassifying an existing entry rather than creating a duplicate. |
 | `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content` | `{ delivered: N }` | Handoffs, broadcasts. |
 
 ## Response envelope
@@ -175,6 +177,8 @@ Always check for `"error"` before reading `"result"`. Errors are not HTTP failur
 **Branches** are **free-form text labels**, not a tree. Typical values: the current git branch, `main`, a feature slug. `search_knowledge.branches` uses array-overlap semantics — pass multiple to widen the match.
 
 **Repositories** are stable repo/project slugs — not URLs. Use the git remote name or a short human-readable label (e.g. `"jubarteai"`, `"mobile-app"`, `"billing-service"`). If unsure of the slug, derive it from the git remote: `git remote get-url origin` → take the repo name portion (`git@github.com:org/jubarteai.git` → `"jubarteai"`). `search_knowledge.repositories` uses the same array-overlap semantics as `branches`. Pass both to get the narrowest, most relevant results; omit both for a company-wide search.
+
+**Refs** are external identifiers tying a knowledge entry to the work that produced it — ticket IDs (`"ENG-441"`), GitHub issue/PR URLs (`"https://github.com/org/repo/pull/88"`), Linear/Jira IDs, design-doc links. Free-form text. Use the **same identifier** in `agent_tasks.refs` (via `echo_current_task`) and in `knowledge_entries.refs` so a search by ref finds both the live work and the captured learnings. `search_knowledge.refs` uses the same `&&` (array-overlap) semantics as branches/repositories.
 
 ## Tool behaviors to know
 
@@ -267,6 +271,8 @@ refs: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"
 - `description` — use for semantic/conceptual searches when you don't know the exact wording. Example: `description: "how do we handle webhook retries when the secret changes"`. Claude expands and reranks this.
 - Use both together when you have a concept *and* a known term — it produces the best results.
 
+**Metadata-only searches** are also valid — pass any combination of `branches`, `repositories`, and/or `refs` with no `keywords`/`description` at all. Examples: `search_knowledge({ agent_id, refs: ["ENG-441"] })` to find every entry linked to a ticket; `search_knowledge({ agent_id, repositories: ["jubarteai"], branches: ["main"] })` to browse a repo's main-branch knowledge. With no text query, results are ordered by `created_at desc` and Claude rerank is skipped (faster, no AI cost). At least one of `keywords | description | branches | repositories | refs` is required.
+
 **How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + tags to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
 
 After fetching: if the entry answers your question, use it and skip `create_knowledge`. If it's close but outdated or incomplete, `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the entry covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description.
@@ -295,7 +301,7 @@ After fetching: if the entry answers your question, use it and skip `create_know
 - You found a better fix or a newer approach that supersedes what's written
 - The entry's `description` is sparse and you can make it more useful
 - The title is misleading and should be renamed (you can update `title` too)
-- The entry's `branches` or `repositories` are wrong or incomplete (you can update those too)
+- The entry's `branches`, `repositories`, or `refs` are wrong or incomplete (you can update those too — e.g. attach a ticket ID retroactively after you learn one)
 - The entry's `kind` is wrong — e.g. a `note` has matured into a confirmed `knowledge` finding, or a `knowledge` entry actually documents an architectural decision and should be `decision`. Pass only `kind` to reclassify without touching other fields.
 
 **Do not update when:**
@@ -394,7 +400,7 @@ After unblocking yourself, leave a `create_knowledge` entry documenting your dec
 - Omitting `branches` on `create_knowledge` (min 1; the schema rejects empty).
 - Omitting `repositories` on `create_knowledge` (min 1; the schema rejects empty).
 - Passing a full URL as a repository — use a short slug like `"jubarteai"`, not `"https://github.com/org/jubarteai"`.
-- Calling `search_knowledge` without either `keywords` or `description` — the tool returns an error; both are optional but at least one is required.
+- Calling `search_knowledge` with no filter at all — at least one of `keywords`, `description`, `branches`, `repositories`, or `refs` is required. Metadata-only searches (just `refs` or just `repositories`) are valid and useful.
 - Requesting `limit` > 50 on `search_knowledge` — the schema caps it at 50 silently.
 - Skipping `search_knowledge` before `create_knowledge` — creates duplicate entries.
 - Acting on a `search_knowledge` result without calling `get_knowledge` first — search returns metadata only (no `description` body). Title alone is not enough to decide whether to use, update, or skip an entry. Always fetch the body before acting.
