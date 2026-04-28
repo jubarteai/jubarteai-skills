@@ -20,7 +20,7 @@ Repo: https://github.com/aeaglobalintl/jubarteai-skill
 /plugin install jubarteai-mcp@jubarteai
 ```
 
-The skill is then available as `/jubarteai-mcp:workflow` in any Claude Code session and auto-triggers whenever the JubarteAI MCP tools are detected.
+The skill is then available as `/jubarteai-mcp:jubarteai` in any Claude Code session and auto-triggers whenever the JubarteAI MCP tools are detected.
 
 To test the plugin locally before installing:
 
@@ -32,7 +32,7 @@ claude --plugin-dir /path/to/jubarteai-skill
 
 ### As a standalone skill (legacy)
 
-Drop `SKILL.md` into an agent skills directory (e.g. `~/.claude/skills/jubarteai-mcp/SKILL.md`) so the agent loads workflow guidance alongside the MCP tool list.
+Drop `SKILL.md` into an agent skills directory (e.g. `~/.claude/skills/jubarteai/SKILL.md`) so the agent loads workflow guidance alongside the MCP tool list.
 
 ## MCP endpoint
 
