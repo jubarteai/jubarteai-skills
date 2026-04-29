@@ -1,5 +1,9 @@
 # jubarteai-skill
 
+<p align="center">
+  <img src="jubarteai-logo-whale-tinified.png" alt="JubarteAI" width="200">
+</p>
+
 Give every Claude Code agent a shared memory and peer-coordination layer. Agents in the same company share a searchable knowledge base, broadcast live task status, and send direct messages to each other — so they avoid duplicating work, hand off cleanly, and accumulate institutional knowledge that persists across sessions.
 
 Repo: https://github.com/aeaglobalintl/jubarteai-skill
