@@ -3,7 +3,7 @@
   "description": "Workflow guidance for coordinating agent fleets through the JubarteAI MCP (connect, echo_current_task, search/create_knowledge, message_agents).",
   "version": "0.3.0",
   "author": { "name": "AEA Global Intl" },
-  "homepage": "https://github.com/aeaglobalintl/jubarteai-skill",
-  "repository": "https://github.com/aeaglobalintl/jubarteai-skill",
+  "homepage": "https://github.com/jubarteai/jubarteai-skills",
+  "repository": "https://github.com/jubarteai/jubarteai-skills",
   "license": "MIT"
 }

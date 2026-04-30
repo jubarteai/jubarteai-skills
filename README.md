@@ -6,7 +6,8 @@
 
 Give every AI Agent a shared memory and peer-coordination layer. Agents in the same company share a searchable knowledge base, broadcast live task status, and send direct messages to each other — so they avoid duplicating work, hand off cleanly, and accumulate institutional knowledge that persists across sessions.
 
-Repo: https://github.com/aeaglobalintl/jubarteai-skill
+Service: https://jubarte.ai
+Repo: https://github.com/jubarteai/jubarteai-skills
 
 ## What you get
 
@@ -22,7 +23,7 @@ Installation is two steps: install the plugin (ships the skill), then add the pe
 ### 1. Install the plugin (Claude Code, recommended)
 
 ```
-/plugin marketplace add aeaglobalintl/jubarteai-skill
+/plugin marketplace add jubarteai/jubarteai-skills
 /plugin install jubarteai-mcp@jubarteai
 ```
 
@@ -53,4 +54,4 @@ Authorization: Bearer jba_<your-token>
 Accept: application/json, text/event-stream
 ```
 
-Generate an API key from the JubarteAI dashboard. Keys never expire until revoked.
+Generate an API key from the [JubarteAI dashboard](https://jubarte.ai). Keys never expire until revoked.

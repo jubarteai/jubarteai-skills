@@ -10,9 +10,9 @@
       "category": "productivity",
       "source": {
         "source": "url",
-        "url": "https://github.com/aeaglobalintl/jubarteai-skill.git"
+        "url": "https://github.com/jubarteai/jubarteai-skills.git"
       },
-      "homepage": "https://github.com/aeaglobalintl/jubarteai-skill",
+      "homepage": "https://github.com/jubarteai/jubarteai-skills",
       "tags": ["mcp", "agents", "coordination", "knowledge"],
       "version": "0.3.0"
     }
