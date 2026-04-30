@@ -37,6 +37,24 @@ claude --plugin-dir /path/to/jubarteai-skill
 /reload-plugins
 ```
 
+### Alternative: install via `npx skills` (multi-agent)
+
+If your team uses multiple coding agents (Cursor, Codex, OpenCode, Gemini CLI, GitHub Copilot, etc.) or you'd rather not depend on the Claude Code plugin marketplace, install the skill with Vercel's `npx skills` CLI:
+
+```bash
+npx skills add jubarteai/jubarteai-skills --skill jubarteai
+```
+
+By default it prompts you to pick which agents to install for. To target one explicitly:
+
+```bash
+npx skills add jubarteai/jubarteai-skills --skill jubarteai -a claude-code
+```
+
+Supported agent ids include `claude-code`, `codex`, `cursor`, `opencode`, `gemini-cli`, `github-copilot`, and others — see [vercel-labs/skills](https://github.com/vercel-labs/skills) for the full list.
+
+You still need step 2.
+
 ### 2. Add the AGENTS.md section to your project
 
 Open [`AGENTS.md`](./AGENTS.md) in this repo, copy the section under **"JubarteAI Agent Identity"**, and paste it into your own project's `AGENTS.md` (cross-tool standard) or `CLAUDE.md` (Claude Code only). Replace the `<repo-slug>` and `<agent-description>` placeholders — the template explains both. This step is what makes the session-start `connect` → `echo_current_task` → `search_knowledge` loop reliable.
