@@ -17,16 +17,18 @@ Repo: https://github.com/aeaglobalintl/jubarteai-skill
 
 ## Installation
 
-### As a Claude Code plugin (recommended)
+Installation is two steps: install the plugin (ships the skill), then add the per-project section to your repo's `AGENTS.md` / `CLAUDE.md`. **Both are required** — the plugin carries the reusable playbook, but the AGENTS.md section carries your project-specific identity (`<repo-slug>`, `<agent-description>`) and is always in context, which is what reliably triggers the session-start workflow. The skill alone is lazy-loaded and can't know your project's values.
+
+### 1. Install the plugin (Claude Code, recommended)
 
 ```
 /plugin marketplace add aeaglobalintl/jubarteai-skill
 /plugin install jubarteai-mcp@jubarteai
 ```
 
-The skill is then available as `/jubarteai-mcp:jubarteai` in any Claude Code session and auto-triggers whenever the JubarteAI MCP tools are detected.
+The skill is then available as `/jubarteai-mcp:jubarteai` and auto-triggers whenever the JubarteAI MCP tools are detected.
 
-To test the plugin locally before installing:
+To test the plugin locally before publishing:
 
 ```bash
 claude --plugin-dir /path/to/jubarteai-skill
@@ -34,9 +36,13 @@ claude --plugin-dir /path/to/jubarteai-skill
 /reload-plugins
 ```
 
-### As a standalone skill (legacy)
+### 2. Add the AGENTS.md section to your project
 
-Drop `SKILL.md` into an agent skills directory (e.g. `~/.claude/skills/jubarteai/SKILL.md`) so the agent loads workflow guidance alongside the MCP tool list.
+Open [`AGENTS.md`](./AGENTS.md) in this repo, copy the section under **"JubarteAI Agent Identity"**, and paste it into your own project's `AGENTS.md` (cross-tool standard) or `CLAUDE.md` (Claude Code only). Replace the `<repo-slug>` and `<agent-description>` placeholders — the template explains both. This step is what makes the session-start `connect` → `echo_current_task` → `search_knowledge` loop reliable.
+
+### Standalone skill (no plugin)
+
+If you can't use the plugin marketplace, drop `SKILL.md` into an agent skills directory (e.g. `~/.claude/skills/jubarteai/SKILL.md`). You still need step 2.
 
 ## MCP endpoint
 
