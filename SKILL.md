@@ -187,7 +187,7 @@ If you're unsure whether something is safe to write, ask: would I commit this to
 | `list_agents` | `agent_id` | `{ agents[] }` — all agents in company including disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task` | Early in session; before big work. Filter on `disconnected_at == null` to get active peers. |
 | `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `refs[]`, `branches[]`, `repositories[]` | `{ id }` | Starting/pivoting work. |
 | `search_knowledge` | `agent_id`, `keywords?`, `description?`, `branches?`, `repositories?`, `refs?`, `kind?` (filter — single value), `limit?` (default 10, max 50) — **at least one of keywords/description/branches/repositories/refs/kind required** | `{ results[]: { id, title, kind, branches, repositories, refs, tags, agent_id, created_at } }` — **metadata only, no description body**. Always call `get_knowledge({ id })` to read the content. | Before writing code; before `create_knowledge`; when stuck. Use `kind: "workdone"` plus `branches`/`repositories`/`refs` at session start to find prior work logs. |
-| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `refs[]?` (default `[]` — ticket IDs / issue or PR URLs), `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`) | `{ id }` | When you learn something reusable — continuously, not just at session end. Also: create one `workdone` entry per task and update it as you go. |
+| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `refs[]?` (default `[]` — ticket IDs / issue or PR URLs), `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`) | `{ id }` | When you learn something reusable — continuously, not just at session end. **Search first with `search_knowledge` + `get_knowledge` to find an existing entry to update; only create when no related entry exists or the new finding is genuinely a different topic.** Also: create one `workdone` entry per task and update it as you go. |
 | `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full record including `description` body and `refs`. | **After every `search_knowledge` hit** before acting on it; or fetching by exact title. |
 | `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?`, `refs[]?`, `kind?` (one of `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`; at least one of these fields required) | `{ id }` | Improving or reclassifying an existing entry rather than creating a duplicate. Use this to keep your `workdone` entry current as the session progresses. |
 | `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content` | `{ delivered: N }` | Handoffs, broadcasts. |
@@ -338,6 +338,32 @@ With no text query, results are ordered by `created_at desc` and Claude rerank i
 After fetching: if the entry answers your question, use it and skip `create_knowledge`. If it's close but outdated or incomplete, `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the entry covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description.
 
 **Narrowing with `branches` and `repositories`**: pass the current branch plus `main` and the current repo slug to get the most focused results. Pass only `repositories` to search across all branches in a repo. Omit both for a company-wide search.
+
+## When and why: create_knowledge
+
+`create_knowledge` is **never your first move on a finding** — search the existing knowledge base first, decide whether to update an existing entry, and only fall through to creating a new one when nothing relevant exists or the finding is a genuinely distinct topic.
+
+**Required pre-flight, every time:**
+
+1. `search_knowledge({ agent_id, keywords, description, branches, repositories, refs })` — scope it to the topic, the current branch + `main`, and the current repo slug. Use both `keywords` (specific terms) and `description` (conceptual phrasing) for best recall.
+2. For each promising hit, `get_knowledge({ id })` to read the body — search returns metadata only, and the title alone is not enough to judge.
+3. Decide: use / update / create.
+
+**Decision rule** (the same heuristic stated under "When and why: search_knowledge"):
+
+- **Same root topic, same system/component, same problem class** → call `update_knowledge`, not create. Merging a new insight into the existing entry is almost always more valuable to future agents than a parallel duplicate. See "When and why: update_knowledge" for the merge pattern.
+- **Related but distinct topic** (different system, different problem class, or supersedes a prior approach) → `create_knowledge` *and* cross-reference the related entry by exact title in your `description` (e.g. `"Builds on 'Stripe webhook idempotency pattern' — see get_knowledge({ name: '...' })"`) so a future reader can fetch both.
+- **No related entry exists** → `create_knowledge`. Empty results on a new topic are normal, not a failure.
+
+For the entry's content, fields, and choosing a `kind`, see "Writing good entries" and "Choosing a `kind`" above — don't redefine those rules here.
+
+**Concrete flow example.** You just resolved a flaky test caused by a missing `--preload`:
+
+1. `search_knowledge({ agent_id, keywords: "bun test preload flaky", repositories: ["jubarteai"] })` → 2 hits.
+2. `get_knowledge({ id })` on each: one is about Jest config (different system → unrelated), the other is "Bun test setup gotchas" covering the same root topic.
+3. The second is the same system + problem class → call `update_knowledge` to add your finding to that entry, not create a new one.
+
+If neither hit had matched, you would `create_knowledge` with a 2-sentence description, `branches: ["main"]`, and the repo slug — then expand later via `update_knowledge`.
 
 ## When and why: get_knowledge
 
