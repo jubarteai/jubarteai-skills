@@ -77,19 +77,20 @@ refs: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"
 
 `search_knowledge` is your first move before writing any non-trivial code and before calling `create_knowledge`. Search first — the answer may already exist.
 
-**`keywords` vs `description` — pick the right one:**
-- `keywords` — use for specific known terms: function names, library names, error messages, config keys. Example: `keywords: "STRIPE_WEBHOOK_SECRET rotation"`. Fast and precise when you know what to look for.
-- `description` — use for semantic/conceptual searches when you don't know the exact wording. Example: `description: "how do we handle webhook retries when the secret changes"`. Claude expands and reranks this.
-- Use both together when you have a concept *and* a known term — it produces the best results.
+**Writing a good `query`:**
+- One field, prose. Describe what you're looking for in your own words — like asking a coworker. Example: `query: "how do we handle Stripe webhook retries when the signing secret rotates"`.
+- **Don't** dump disconnected keywords (`"stripe webhook secret rotation idempotent retries 2026"`). The hybrid retrieval embeds your text *and* converts it to a tsquery — both work substantially better on coherent prose than on a bag of unrelated terms. A diffuse vector matches nothing strongly, and `websearch_to_tsquery` AND's terms by default, so adding more terms shrinks the candidate set.
+- Include a domain term or two if you have one (function name, library name, error string), but inline them in the sentence rather than listing them. `query: "why does our knowledge_entries embedding column end up null after update_knowledge"` beats `query: "knowledge_entries embedding null update_knowledge"`.
+- Up to 2000 chars. Most good queries are one sentence.
 
-**Metadata-only searches** are also valid — pass any combination of `branches`, `repositories`, `refs`, and/or `kind` with no `keywords`/`description` at all. Examples:
+**Metadata-only searches** are also valid — pass any combination of `branches`, `repositories`, `refs`, and/or `kind` with no `query` at all. Examples:
 
 - `search_knowledge({ agent_id, refs: ["ENG-441"] })` — every entry linked to a ticket.
 - `search_knowledge({ agent_id, repositories: ["jubarteai"], branches: ["main"] })` — browse a repo's main-branch knowledge.
 - `search_knowledge({ agent_id, kind: "workdone", branches: ["feature/foo"] })` — prior work logs on a branch (the **session-start workdone search**, see `references/workdone.md`).
 - `search_knowledge({ agent_id, kind: "decision" })` — every architectural decision in the company.
 
-With no text query, results are ordered by `created_at desc` and Claude rerank is skipped (faster, no AI cost). At least one of `keywords | description | branches | repositories | refs | kind` is required.
+With no text query, results are ordered by `created_at desc` and Claude rerank is skipped (faster, no AI cost). At least one of `query | branches | repositories | refs | kind` is required.
 
 **How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + tags to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
 
@@ -103,7 +104,7 @@ After fetching: if the entry answers your question, use it and skip `create_know
 
 **Required pre-flight, every time:**
 
-1. `search_knowledge({ agent_id, keywords, description, branches, repositories, refs })` — scope it to the topic, the current branch + `main`, and the current repo slug. Use both `keywords` (specific terms) and `description` (conceptual phrasing) for best recall.
+1. `search_knowledge({ agent_id, query, branches, repositories, refs })` — scope it to the topic, the current branch + `main`, and the current repo slug. Phrase `query` as prose describing what you're looking for, not as a bag of keywords.
 2. For each promising hit, `get_knowledge({ id })` to read the body — search returns metadata only, and the title alone is not enough to judge.
 3. Decide: use / update / create.
 
@@ -117,7 +118,7 @@ For the entry's content, fields, and choosing a `kind`, see `references/writing-
 
 **Concrete flow example.** You just resolved a flaky test caused by a missing `--preload`:
 
-1. `search_knowledge({ agent_id, keywords: "bun test preload flaky", repositories: ["jubarteai"] })` → 2 hits.
+1. `search_knowledge({ agent_id, query: "flaky bun tests caused by missing --preload", repositories: ["jubarteai"] })` → 2 hits.
 2. `get_knowledge({ id })` on each: one is about Jest config (different system → unrelated), the other is "Bun test setup gotchas" covering the same root topic.
 3. The second is the same system + problem class → call `update_knowledge` to add your finding to that entry, not create a new one.
 

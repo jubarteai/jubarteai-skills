@@ -51,7 +51,7 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 | `disconnect` | `agent_id` | `{ disconnected: true }` | Session end. |
 | `list_agents` | `agent_id` | `{ agents[] }` — all agents in company including disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task` | Early in session; before big work. Filter on `disconnected_at == null` for active peers. |
 | `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `refs[]`, `branches[]`, `repositories[]` | `{ id }` | Starting/pivoting work. |
-| `search_knowledge` | `agent_id`, `keywords?`, `description?`, `branches?`, `repositories?`, `refs?`, `kind?`, `limit?` (default 10, max 50) — at least one filter required | `{ results[]: { id, title, kind, branches, repositories, refs, tags, agent_id, created_at } }` — **metadata only**. Call `get_knowledge({ id })` to read the body. | Before writing code; before `create_knowledge`; when stuck. Use `kind: "workdone"` plus `branches`/`repositories`/`refs` at session start. |
+| `search_knowledge` | `agent_id`, `query?` (prose, max 2000 chars), `branches?`, `repositories?`, `refs?`, `kind?`, `limit?` (default 10, max 50) — at least one filter required | `{ results[]: { id, title, kind, branches, repositories, refs, tags, agent_id, created_at } }` — **metadata only**. Call `get_knowledge({ id })` to read the body. | Before writing code; before `create_knowledge`; when stuck. Use `kind: "workdone"` plus `branches`/`repositories`/`refs` at session start. Write `query` as prose (like asking a coworker), not a bag of keywords — embeddings and tsquery both rank prose far better. |
 | `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `refs[]?`, `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`) | `{ id }` | When you learn something reusable — continuously, not just at session end. **Search first with `search_knowledge` + `get_knowledge` to find an existing entry to update; only create when no related entry exists or the new finding is genuinely a different topic.** Also: one `workdone` entry per task, updated as you go. |
 | `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full record including `description` body and `refs`. | **After every `search_knowledge` hit** before acting on it; or fetching by exact title. |
 | `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?`, `refs[]?`, `kind?` (at least one of these required) | `{ id }` | Improving or reclassifying an existing entry rather than creating a duplicate. Use this to keep your `workdone` entry current. |
@@ -72,7 +72,7 @@ These thoughts mean STOP — search anyway.
 
 ## Cadence examples
 
-- Adding a base-ui dropdown for the first time → `search_knowledge({ keywords: "base-ui dropdown menu" })` *before* opening `dropdown-menu.tsx`.
+- Adding a base-ui dropdown for the first time → `search_knowledge({ query: "how do we use base-ui dropdown menus in this repo" })` *before* opening `dropdown-menu.tsx`.
 - `npm run type-check` fails with a `Record<K, …>` indexing error → search the error pattern, then patch.
 - User says "code review" → search the area being reviewed; don't only diff.
 - Just landed a code-review fix commit → `update_knowledge` the workdone *now*, not at session end.
@@ -86,7 +86,8 @@ These thoughts mean STOP — search anyway.
 - Ignoring the `messages` array — you'll miss peer signals and look out-of-sync.
 - Omitting `branches` or `repositories` on `create_knowledge` (min 1; the schema rejects empty).
 - Passing a full URL as a repository — use a short slug like `"jubarteai"`, not `"https://github.com/org/jubarteai"`.
-- Calling `search_knowledge` with no filter at all — at least one of `keywords`, `description`, `branches`, `repositories`, `refs`, or `kind` is required. Metadata-only searches are valid and useful.
+- Calling `search_knowledge` with no filter at all — at least one of `query`, `branches`, `repositories`, `refs`, or `kind` is required. Metadata-only searches are valid and useful.
+- Writing `query` as a bag of disconnected keywords (`"stripe checkout success_url cancel_url localhost redirect production"`) — that diffuses the embedding vector and AND's apart in tsquery so the right entry drops out of the top results. Write it as a single prose sentence describing what you're looking for: `"how do we set Stripe checkout success_url and cancel_url so they work in both localhost and production"`.
 - Skipping the workdone search at session start when picking up an in-flight branch or ticket — you'll redo work or hit conflicts a peer already resolved.
 - Writing N workdone entries per session instead of one — update the existing entry as work progresses.
 - Putting reusable findings (root causes, patterns, configs) in a workdone entry — those belong in a separate `kind: "knowledge"` entry; workdone is a session log, not an encyclopedia.
