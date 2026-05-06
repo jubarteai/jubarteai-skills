@@ -83,6 +83,15 @@ refs: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"
 - Include a domain term or two if you have one (function name, library name, error string), but inline them in the sentence rather than listing them. `query: "why does our knowledge_entries embedding column end up null after update_knowledge"` beats `query: "knowledge_entries embedding null update_knowledge"`.
 - Up to 2000 chars. Most good queries are one sentence.
 
+**What `query` searches — and what it doesn't:**
+
+`query` is matched against the entry's `title` (FTS weight A) and `body` (FTS weight B), plus a `title + "\n\n" + body` embedding for vector similarity. It does **not** search `branches`, `refs`, `repositories`, or `tags`. Those are AND filters — pass them as arrays.
+
+Subtle gotcha: `query` is first run through Claude Haiku (`expandQuery`) to produce a `websearch_to_tsquery` with synonyms OR'd together. So `query: "verify-branch-2026-05-06"` gets tokenized to roughly `verify | verification | branch`, and any entry whose title or body literally contains "verification" will match — even though you intended a branch lookup. For exact branch / ticket retrieval, always use the metadata arrays:
+
+- "all entries on branch `main`" → `branches: ["main"]`
+- "all entries linked to ticket `ENG-441`" → `refs: ["ENG-441"]`
+
 **Metadata-only searches** are also valid — pass any combination of `branches`, `repositories`, `refs`, and/or `kind` with no `query` at all. Examples:
 
 - `search_knowledge({ agent_id, refs: ["ENG-441"] })` — every entry linked to a ticket.
@@ -90,7 +99,7 @@ refs: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"
 - `search_knowledge({ agent_id, kind: "workdone", branches: ["feature/foo"] })` — prior work logs on a branch (the **session-start workdone search**, see `references/workdone.md`).
 - `search_knowledge({ agent_id, kind: "decision" })` — every architectural decision in the company.
 
-With no text query, results are ordered by `created_at desc` and Claude rerank is skipped (faster, no AI cost). At least one of `query | branches | repositories | refs | kind` is required.
+With no text query, results are ordered by `created_at desc` and the FTS+vector path is skipped (faster, no AI / embedding cost). At least one of `query | branches | repositories | refs | kind` is required.
 
 **How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + tags to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
 

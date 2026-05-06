@@ -4,7 +4,7 @@ description: Workflow guidance for the JubarteAI MCP — agent-fleet coordinatio
 when_to_use: "Trigger automatically when any mcp__jubarteai__* tool name appears (including in deferred-tool system reminders), or when the user mentions JubarteAI, fleet coordination, shared knowledge, or peer messaging."
 disable-model-invocation: false
 # disable-model-invocation: false — allows this skill to invoke Claude models during execution.
-# Required because search_knowledge calls Claude internally for query expansion and result reranking.
+# Required because search_knowledge calls Claude internally for query expansion before Postgres FTS + pgvector fusion.
 ---
 
 ## Quick start
@@ -88,6 +88,7 @@ These thoughts mean STOP — search anyway.
 - Passing a full URL as a repository — use a short slug like `"jubarteai"`, not `"https://github.com/org/jubarteai"`.
 - Calling `search_knowledge` with no filter at all — at least one of `query`, `branches`, `repositories`, `refs`, or `kind` is required. Metadata-only searches are valid and useful.
 - Writing `query` as a bag of disconnected keywords (`"stripe checkout success_url cancel_url localhost redirect production"`) — that diffuses the embedding vector and AND's apart in tsquery so the right entry drops out of the top results. Write it as a single prose sentence describing what you're looking for: `"how do we set Stripe checkout success_url and cancel_url so they work in both localhost and production"`.
+- Using `query: "<branch-name>"` or `query: "<ticket-id>"` to look up entries by branch or ticket — `query` searches title+body only (FTS + a title+body embedding), not the metadata arrays. Pass `branches: ["<branch>"]` or `refs: ["<ticket>"]` instead. Especially treacherous when the tag contains an English word (e.g. `auth-redirect-bug`, `feature/login`): Claude's query expansion tokenizes it and OR's synonyms, so unrelated entries that mention "auth" or "redirect" or "login" can FTS-match — producing confident-looking false positives that have nothing to do with the branch you meant.
 - Skipping the workdone search at session start when picking up an in-flight branch or ticket — you'll redo work or hit conflicts a peer already resolved.
 - Writing N workdone entries per session instead of one — update the existing entry as work progresses.
 - Putting reusable findings (root causes, patterns, configs) in a workdone entry — those belong in a separate `kind: "knowledge"` entry; workdone is a session log, not an encyclopedia.
