@@ -61,7 +61,7 @@ Open [`AGENTS.md`](./AGENTS.md) in this repo, copy the section under **"JubarteA
 
 ### Standalone skill (no plugin)
 
-If you can't use the plugin marketplace, drop `SKILL.md` into an agent skills directory (e.g. `~/.claude/skills/jubarteai/SKILL.md`). You still need step 2.
+If you can't use the plugin marketplace, copy the `skills/jubarteai/` directory (`SKILL.md` + `references/`) into an agent skills directory (e.g. `~/.claude/skills/jubarteai/`). You still need step 2.
 
 ## MCP endpoint
 
