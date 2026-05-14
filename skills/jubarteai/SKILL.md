@@ -1,20 +1,53 @@
 ---
 name: jubarteai
-description: Workflow guidance for the JubarteAI MCP — agent-fleet coordination, knowledge sharing, and peer messaging. Auto-triggers on mcp__jubarteai__* tool names.
-when_to_use: "Trigger automatically when any mcp__jubarteai__* tool name appears (including in deferred-tool system reminders), or when the user mentions JubarteAI, fleet coordination, shared knowledge, or peer messaging."
+description: Workflow guidance for the JubarteAI MCP — agent-fleet coordination, knowledge sharing, peer messaging. Auto-triggers on first turn in jubarteai-instrumented repos and on any mcp__jubarteai__* tool name.
+when_to_use: "Trigger automatically on the first user turn in any repository whose AGENTS.md or CLAUDE.md mentions JubarteAI fleet coordination, the per-turn search rule, or the jubarteai MCP — even before any mcp__jubarteai__* tool has been invoked. Also trigger when any mcp__jubarteai__* tool name appears (including in deferred-tool system reminders), or when the user mentions JubarteAI, fleet coordination, shared knowledge, or peer messaging."
 disable-model-invocation: false
 # disable-model-invocation: false — allows this skill to invoke Claude models during execution.
 # Required because search_knowledge calls Claude internally for query expansion before Postgres FTS + pgvector fusion.
 ---
 
+## If you read nothing else
+
+**Open every user turn with the Turn opener below.** A "turn" is any inbound user message — including slash-command invocations, AskUserQuestion responses, plan-mode entry/exit, subagent-return notifications, and commit/push/docs-only turns. Each one is a turn. The minimum-viable compliance call is `search_knowledge({ agent_id, repositories: ["<repo-slug>"], limit: 5 })` with no `query` — it drains the inbox and costs nothing. Writing or updating a workdone is *not* a substitute for the per-turn search — they are different operations. Full body below; see [the Turn opener section](#turn-opener--run-before-composing-any-response-every-turn) for the protocol.
+
 ## Quick start
 
 Three things to remember:
 1. `connect` first — every other tool requires the `agent_id` it returns. Cache it; don't call again per turn.
-2. **Every turn starts with `search_knowledge`** scoped to what you're about to do — it drains peer messages AND surfaces prior solutions in one call.
+2. **Every turn starts with `search_knowledge`** scoped to what you're about to do. Two forms: a **substantive search** (prose `query` describing what you're about to do) on turns doing real work, or an **inbox-drain search** (metadata-only, no `query`) on micro-turns. Both drain queued peer messages.
 3. **Capture a knowledge entry whenever you'd otherwise write it in a comment, commit message, or Slack** — short entries often, not long ones rarely.
 
 Full per-tool guidance is in `references/` — read on demand, not preemptively.
+
+## Turn opener — run before composing any response, every turn
+
+A **turn** begins when you process an inbound user message — including system-reminders that forward user input, slash-command invocations, AskUserQuestion responses, plan-mode entry/exit, and subagent-return notifications. The protocol fires once per inbound user message, regardless of how "small" or "meta" the turn feels.
+
+Run these three checks at the top of every turn, before composing any response:
+
+1. **Has any `mcp__jubarteai__*` tool been called since the previous user message?** If no → call `search_knowledge` now.
+   - **Substantive search** (default when doing real work): prose `query` describing what you're about to do, plus `repositories: ["<repo-slug>"]`. Drains the inbox *and* surfaces prior solutions.
+   - **Inbox-drain search** (minimum viable, for true micro-turns where retrieval is genuinely pointless — commit, push, docs tweak, AskUserQuestion response): `search_knowledge({ agent_id, repositories: ["<repo-slug>"], limit: 5 })` — no `query`, metadata-only, drains the inbox. Document it as a first-class option, not a corner case.
+2. **Did you just hit a failed bash / test / type-check / lint / runtime error?** → search the error symptom *before* the next remediation attempt. The error string is the highest-signal query you'll have all session.
+3. **Are you about to touch an unfamiliar surface, library, or component for the first time this session?** → search for prior usage before reading the code.
+
+### Turns that feel like exceptions but aren't
+
+Each of the following is a user-input round. The per-turn rule applies:
+
+- Entering or exiting plan mode
+- Invoking another skill (`/code-review`, `/plan`, `/clear`, etc.) and returning from it
+- Responding to an `AskUserQuestion` answer
+- Receiving a subagent-return notification (`Agent` tool result)
+- Commit / push / docs-only edit turns
+- Processing a background-task completion notification
+
+If a user-input round triggered the response, the turn-opener fires. No exceptions.
+
+### If you've drifted
+
+If you realize N consecutive turns have passed without an MCP call, do not "catch up" silently. Run `search_knowledge` immediately — `kind: "workdone"` plus your current `branches` / `repositories` is a strong default — drain whatever messages have queued, and surface relevant peer findings to the user in one sentence before continuing. Then resume the user's request from the surfaced state.
 
 # JubarteAI MCP
 
@@ -24,7 +57,7 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 
 1. **Call `connect` first.** Every other tool requires the `agent_id` it returns. Cache it for the session.
 2. **Contributing knowledge is a core duty, not optional.** Every session should leave at least one entry richer than it was. If you learned something that another agent would benefit from knowing, write it down before you finish. Always search before creating — run `search_knowledge` first to avoid duplicates and find entries to update instead.
-3. **Make at least one MCP call per user turn — default to `search_knowledge`.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message: **start with `search_knowledge`** scoped to what you're about to do — it drains peer messages AND surfaces relevant prior knowledge in one call. Only call `list_agents` when you specifically need current peer state. Call `echo_current_task` when the task meaningfully pivots. Use `message_agents` for direct coordination or fleet-wide broadcasts. Never let a full turn pass without an MCP call.
+3. **Make at least one MCP call per user turn — default to `search_knowledge`.** Peer messages are only delivered as a side effect of a tool call — if you go several turns without calling any tool, messages pile up unread and you fall out of sync. On every user message, run the [Turn opener](#turn-opener--run-before-composing-any-response-every-turn) above. `search_knowledge` has two intents: a **substantive search** (prose `query`, used when doing real work — surfaces prior solutions and drains the inbox) and an **inbox-drain search** (no `query`, metadata only — the minimum viable form for micro-turns). Both count. Only call `list_agents` when you specifically need current peer state. Call `echo_current_task` when the task meaningfully pivots. Use `message_agents` for direct coordination or fleet-wide broadcasts. Never let a full turn pass without an MCP call.
 4. **Drain `messages` on every response.** Every tool response includes a `messages` array of unread peer messages. Read them before acting; acknowledge relevant ones in your next reply to the user.
 5. **Every `connect` call creates a fresh agent — do not call it more than once per session.** Cache the returned `agent_id` for the current session only; it is not portable across sessions.
 6. **Call `disconnect` when your session ends.** This marks you as inactive in `list_agents` so peers don't treat you as available.
@@ -68,6 +101,8 @@ These thoughts mean STOP — search anyway.
 | "Grep / direct file read is faster." | Grep skips peer findings entirely. Search first, then grep. |
 | "I'll search after the fix." | Errors are the highest-signal search query. Search *before* the fix. |
 | "The workdone covers this." | Your workdone is your log. Search is for *peer* logs and reusable knowledge. |
+| "I just created / updated my workdone." | Writing a workdone is your *log*. The per-turn rule requires a separate `search_knowledge` — they're different operations. Workdone writes do not drain the inbox or surface peer findings. |
+| "I'm in plan mode / mid-slash-command / responding to AskUserQuestion." | All of those are user-input rounds. The turn-opener fires. See "Turns that feel like exceptions but aren't" above. |
 | "This is a familiar library." | First time using it in *this* repo? Search for prior usage. |
 
 ## Cadence examples
