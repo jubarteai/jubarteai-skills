@@ -32,7 +32,7 @@ Always check for `"error"` before reading `"result"`. Errors are not HTTP failur
 | `connect` fails (network, auth rejected, seat suspended) | JubarteAI is unavailable. Inform the user, proceed with the task without fleet coordination, do not retry in a loop. |
 | `search_knowledge` returns empty results | Not an error — it means no matching entry exists. Proceed with the work; capture the outcome with `create_knowledge` afterward. |
 | `message_agents` returns `{ delivered: 0 }` | All targets were invalid. Re-run `list_agents` to get fresh IDs and retry once. Do not loop. |
-| `create_knowledge` or `update_knowledge` fails | Non-fatal. Complete the user's task first; attempt the write once at session end. Do not block on knowledge writes. |
+| `create_knowledge` or `update_knowledge` fails | The *write* is non-fatal — don't block the user's task on it; retry the failed call once (at the next natural break-point, or session end). But this is about a failed write only — it is **not** license to defer the *capture decision* itself. Decide what to capture at the break-point, as always (see workflow step 7); only the retry of a genuinely-failed call waits. |
 | Transient HTTP 5xx or timeout | One retry is reasonable. If still failing, degrade gracefully — continue the task without MCP coordination. |
 
 ## Branches and repositories convention
