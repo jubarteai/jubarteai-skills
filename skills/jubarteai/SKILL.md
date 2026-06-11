@@ -32,9 +32,9 @@ Targets, not hard limits:
 
 **Dense vs padded — the *same* finding, same root cause, same reuse signal:**
 
-> **Padded (~680 chars):** "Root cause: in src/format.ts, formatCurrency used `const value = amount || lastKnownAmount!`. Since 0 is falsy, an amount of exactly 0 fell through to lastKnownAmount, which is undefined on the first call → Intl formats undefined as "$NaN". This surfaced in the metrics panel for any row with baseline === 0 (a brand-new metric with no prior period). Fix: use nullish coalescing `amount ?? lastKnownAmount!` so the fallback only triggers when amount is genuinely undefined, not when it's 0. Watch for this pattern anywhere the live-ticker fallback (`x || lastKnown`) guards a numeric value that can legitimately be 0."
+> **Padded (~620 chars):** "Root cause: in src/format.ts, formatCurrency used `const value = amount || lastKnownAmount!`. Since 0 is falsy, an amount of exactly 0 fell through to lastKnownAmount, which is undefined on the first call → Intl formats undefined as "$NaN". This surfaced in the metrics panel for any row with baseline === 0 (a brand-new metric with no prior period). Fix: use nullish coalescing `amount ?? lastKnownAmount!` so the fallback only triggers when amount is genuinely undefined, not when it's 0. Watch for this pattern anywhere the live-ticker fallback (`x || lastKnown`) guards a numeric value that can legitimately be 0."
 
-> **Dense (~200 chars):** "`formatCurrency` (src/format.ts) renders `$NaN` when amount is 0: `amount || lastKnown` treats 0 as falsy and falls through to an undefined fallback. Fix: `??`. Applies to any `x || fallback` guarding a value that can legitimately be 0."
+> **Dense (~240 chars):** "`formatCurrency` (src/format.ts) renders `$NaN` when amount is 0: `amount || lastKnown` treats 0 as falsy and falls through to an undefined fallback. Fix: `??`. Applies to any `x || fallback` guarding a value that can legitimately be 0."
 
 Third the characters, none of the value lost — same file, same root cause, same fix, same reuse cue. Write the dense version.
 

@@ -27,7 +27,7 @@ Larger things also worth capturing:
 | Field | Guidance |
 |-------|----------|
 | `title` | One-line noun phrase: what is this knowledge *about*? (e.g. "Stripe webhook idempotency pattern") |
-| `description` | Lead with the insight, then the *why* (never just the *what*). Aim for 2–4 tight sentences (~400 chars) — you're billed for every character on every retrieval, so write dense, not long. Markdown renders, but don't reach for headers and bullet lists when two plain sentences carry the same content; reserve a code block for the one line of code that matters. See [Keep MCP payloads dense] in `SKILL.md`. |
+| `description` | Lead with the insight, then the *why* (never just the *what*). Aim for 2–4 tight sentences (~400 chars) — you're billed for every character on every retrieval, so write dense, not long. Markdown renders, but don't reach for headers and bullet lists when two plain sentences carry the same content; reserve a code block for the one line of code that matters. See the "Keep MCP payloads dense" section in `SKILL.md`. |
 | `branches` | At least one. When unsure, `["main"]` is always a valid default. |
 | `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
 | `refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
