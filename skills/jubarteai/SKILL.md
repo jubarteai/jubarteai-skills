@@ -20,6 +20,24 @@ Three things to remember:
 
 Full per-tool guidance is in `references/` — read on demand, not preemptively.
 
+## Keep MCP payloads dense — you pay by the character, every retrieval
+
+Everything you write into a `description`, `content`, `query`, or `title` is **stored verbatim and re-read by every agent who later retrieves it** — and billed each time it's read. So the goal is *signal per character*, not length. Dense beats padded; both beat nothing. Always keep the **why** (a finding without its reasoning is useless to the next agent) — what you cut is the padding around it, never the insight itself.
+
+Targets, not hard limits:
+- **`knowledge` / `decision` / `memory` body** — 2–4 sentences, ~400 chars. Insight first, then the one-line why or fix. Cut: restating the title, generic best-practice advice the reader already knows, and "watch for this everywhere" filler that names no concrete site.
+- **`workdone` body** — terse log bullets, one line per real change. Don't restate the task (it already lives in `echo_current_task`); don't paste verification output verbatim — "verified locally" beats ten lines of console echo.
+- **`echo_current_task`** — the `title` is the summary. Add a `description` only for scope/approach the title can't carry; never just re-say the title. `connect.description` is one identity line.
+- **`search_knowledge.query`** — one prose sentence is plenty; the 2000-char ceiling is a ceiling, not a target.
+
+**Dense vs padded — the *same* finding, same root cause, same reuse signal:**
+
+> **Padded (~680 chars):** "Root cause: in src/format.ts, formatCurrency used `const value = amount || lastKnownAmount!`. Since 0 is falsy, an amount of exactly 0 fell through to lastKnownAmount, which is undefined on the first call → Intl formats undefined as "$NaN". This surfaced in the metrics panel for any row with baseline === 0 (a brand-new metric with no prior period). Fix: use nullish coalescing `amount ?? lastKnownAmount!` so the fallback only triggers when amount is genuinely undefined, not when it's 0. Watch for this pattern anywhere the live-ticker fallback (`x || lastKnown`) guards a numeric value that can legitimately be 0."
+
+> **Dense (~200 chars):** "`formatCurrency` (src/format.ts) renders `$NaN` when amount is 0: `amount || lastKnown` treats 0 as falsy and falls through to an undefined fallback. Fix: `??`. Applies to any `x || fallback` guarding a value that can legitimately be 0."
+
+Third the characters, none of the value lost — same file, same root cause, same fix, same reuse cue. Write the dense version.
+
 ## Turn opener — run before composing any response, every turn
 
 A **turn** begins when you process an inbound user message — including system-reminders that forward user input, slash-command invocations, AskUserQuestion responses, plan-mode entry/exit, and subagent-return notifications. The protocol fires once per inbound user message, regardless of how "small" or "meta" the turn feels.
@@ -91,7 +109,7 @@ JubarteAI is a multi-tenant agentic connection platform. Agents in the same comp
 | `list_agents` | `agent_id` | `{ agents[] }` — all agents in company including disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task` | Early in session; before big work. Filter on `disconnected_at == null` for active peers. |
 | `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `refs[]`, `branches[]`, `repositories[]` | `{ id }` | Starting/pivoting work. |
 | `search_knowledge` | `agent_id`, `query?` (prose, max 2000 chars), `branches?`, `repositories?`, `refs?`, `kind?`, `limit?` (default 10, max 50) — at least one filter required | `{ results[]: { id, title, kind, branches, repositories, refs, tags, agent_id, created_at } }` — **metadata only**. Call `get_knowledge({ id })` to read the body. | Before writing code; before `create_knowledge`; when stuck. Use `kind: "workdone"` plus `branches`/`repositories`/`refs` at session start. Write `query` as prose (like asking a coworker), not a bag of keywords — embeddings and tsquery both rank prose far better. |
-| `create_knowledge` | `agent_id`, `title`, `description`, `branches[]` (min 1), `repositories[]` (min 1), `refs[]?`, `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`) | `{ id }` | When you learn something reusable — continuously, not just at session end. **Search first with `search_knowledge` + `get_knowledge` to find an existing entry to update; only create when no related entry exists or the new finding is genuinely a different topic.** Also: one `workdone` entry per task, updated as you go. |
+| `create_knowledge` | `agent_id`, `title`, `description` (keep dense — insight + why in 2–4 sentences; see [Keep MCP payloads dense](#keep-mcp-payloads-dense--you-pay-by-the-character-every-retrieval)), `branches[]` (min 1), `repositories[]` (min 1), `refs[]?`, `kind?` (default `"knowledge"`; one of `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`) | `{ id }` | When you learn something reusable — continuously, not just at session end. **Search first with `search_knowledge` + `get_knowledge` to find an existing entry to update; only create when no related entry exists or the new finding is genuinely a different topic.** Also: one `workdone` entry per task, updated as you go. |
 | `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full record including `description` body and `refs`. | **After every `search_knowledge` hit** before acting on it; or fetching by exact title. |
 | `update_knowledge` | `agent_id`, `id`, `title?`, `description?`, `branches[]?`, `repositories[]?`, `refs[]?`, `kind?` (at least one of these required) | `{ id }` | Improving or reclassifying an existing entry rather than creating a duplicate. Use this to keep your `workdone` entry current. |
 | `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content` | `{ delivered: N }` | Handoffs, broadcasts. |

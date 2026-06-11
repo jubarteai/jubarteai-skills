@@ -57,7 +57,7 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 
 **What goes in each field:**
 - `title` — one-line present-tense summary: `"Migrating auth middleware to use JWTs"`, not `"auth stuff"`
-- `description` — optional but valuable: what approach you're taking, what's in scope, what's not
+- `description` — optional; add it only for scope the title can't carry (approach, what's explicitly out of scope). Don't restate the title — that's wasted characters peers re-read on every `list_agents`.
 - `branches` — every git branch you're touching, including `main` if you're working there
 - `repositories` — every repo slug you're touching (e.g. `["jubarteai", "mobile-app"]`)
 - `tickets` — issue/ticket IDs (e.g. `["PROJ-123"]`) so peers can find the original spec

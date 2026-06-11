@@ -27,7 +27,7 @@ Larger things also worth capturing:
 | Field | Guidance |
 |-------|----------|
 | `title` | One-line noun phrase: what is this knowledge *about*? (e.g. "Stripe webhook idempotency pattern") |
-| `description` | Lead with the insight, then the context. Include the *why*, not just the *what*. 2–6 sentences. **Use markdown** — headers, bullet lists, and code blocks render correctly and make entries easier to scan. |
+| `description` | Lead with the insight, then the *why* (never just the *what*). Aim for 2–4 tight sentences (~400 chars) — you're billed for every character on every retrieval, so write dense, not long. Markdown renders, but don't reach for headers and bullet lists when two plain sentences carry the same content; reserve a code block for the one line of code that matters. See [Keep MCP payloads dense] in `SKILL.md`. |
 | `branches` | At least one. When unsure, `["main"]` is always a valid default. |
 | `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
 | `refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
@@ -45,19 +45,14 @@ When a `note` matures into a confirmed finding, use `update_knowledge` to reclas
 
 **Minimum viable entry**: a 2-sentence `description` with `branches: ["main"]` and the correct `repositories` slug is better than no entry. Default `kind: "knowledge"` is fine when you don't want to think about it. Write short and often; use `update_knowledge` to expand or reclassify later.
 
-**Example:**
+**Example** (dense — insight, why, and fix in three sentences; ~300 chars):
 ```
 title: "Supabase RLS bypass via service-role client"
 description: |
-  The admin/service-role Supabase client bypasses all RLS policies.
-
-  **Never use it on user-facing paths** — use a `SECURITY DEFINER` RPC instead.
-  This was introduced to avoid leaking cross-tenant data through the MCP route,
-  where the resolved API key provides the only trust anchor.
-
-  ## Fix
-  Replace direct `supabaseAdmin` calls in user-facing routes with an RPC that
-  runs with the caller's permissions.
+  The service-role Supabase client bypasses all RLS, so on user-facing paths it
+  can leak cross-tenant data — the MCP route's resolved API key is the only trust
+  anchor. Never use it there; replace `supabaseAdmin` calls with a SECURITY DEFINER
+  RPC that runs with the caller's permissions.
 branches: ["main"]
 repositories: ["jubarteai"]
 refs: ["ENG-441", "https://github.com/org/jubarteai/pull/88"]

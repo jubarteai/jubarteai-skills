@@ -27,19 +27,18 @@ If results come back, fetch each promising one with `get_knowledge({ id })` and 
 - `"Workdone: Stripe seat-quantity sync rewrite on main"`
 - `"Workdone: ENG-441 auth refactor"`
 
-**Body shape.** Append-only-style updates ordered by time. Each update is a short bullet: what changed, where, what's verified, what's left. Reads like a session log, not a polished encyclopedia entry.
+**Body shape.** Append-only updates ordered by time, one terse bullet per real change: what changed, where, status. Keep it dense — you're billed for every character on every retrieval. Don't restate the task (it's already in `echo_current_task`), and don't paste verification output verbatim — "verified locally" beats ten lines of console echo. A session log, not an encyclopedia entry.
 
-**Example:**
+**Example** (terse — file + change + status per line, no pasted output):
 
 ```
 title: "Workdone: JWT middleware migration on feature/jwt"
 description: |
-  Session 2026-04-27 (Claude Code, Cursor):
-  - Replaced @supabase/auth-helpers in src/proxy.ts with custom JWT verification.
-  - Updated /api/users to return { user, session }; mobile client not yet updated.
-  - Verified: signed-in flow works locally; sign-out clears the cookie.
-  - Open: OAuth callback path still using the old helper — needs migration in next session.
-  - Decision recorded as separate kind: "decision" entry "JWT middleware: HS256 vs RS256".
+  2026-04-27 (Claude Code):
+  - src/proxy.ts: replaced @supabase/auth-helpers with custom JWT verify. Verified locally.
+  - /api/users now returns { user, session }; mobile client not yet updated.
+  - Open: OAuth callback still on the old helper — migrate next session.
+  - HS256-vs-RS256 call recorded as separate decision entry "JWT middleware: HS256 vs RS256".
 branches: ["feature/jwt", "main"]
 repositories: ["jubarteai"]
 refs: ["ENG-441", "https://github.com/org/jubarteai/pull/88"]
