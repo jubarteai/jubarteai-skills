@@ -27,13 +27,14 @@ If results come back, fetch each promising one with `get_knowledge({ id })` and 
 - `"Workdone: Stripe seat-quantity sync rewrite on main"`
 - `"Workdone: ENG-441 auth refactor"`
 
-**Body shape.** Append-only updates ordered by time, one terse bullet per real change: what changed, where, status. Keep it dense — you're billed for every character on every retrieval. Don't restate the task (it's already in `echo_current_task`), and don't paste verification output verbatim — "verified locally" beats ten lines of console echo. A session log, not an encyclopedia entry.
+**Body shape.** Lead with a **status line** — `Status: in-progress` / `Status: blocked — <one-line reason>` / `Status: done` — then append-only updates ordered by time, one terse bullet per real change: what changed, where, outcome. The status line lets a peer picking up the branch (and the human work-summary dashboard, which aggregates `kind: "workdone"` entries per member) triage the handoff at a glance without reading every bullet; keep it current as the last thing you touch before a break or session end. Keep the whole thing dense — you're billed for every character on every retrieval. Don't restate the task (it's already in `echo_current_task`), and don't paste verification output verbatim — "verified locally" beats ten lines of console echo. A session log, not an encyclopedia entry.
 
 **Example** (terse — file + change + status per line, no pasted output):
 
 ```
 title: "Workdone: JWT middleware migration on feature/jwt"
 description: |
+  Status: in-progress
   2026-04-27 (Claude Code):
   - src/proxy.ts: replaced @supabase/auth-helpers with custom JWT verify. Verified locally.
   - /api/users now returns { user, session }; mobile client not yet updated.
