@@ -31,6 +31,8 @@ Larger things also worth capturing:
 | `branches` | At least one. When unsure, `["main"]` is always a valid default. |
 | `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
 | `refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
+| `tags` | Optional. A few short keyword labels (e.g. `["auth", "rate-limit"]`). They're returned in `search_knowledge` results, so a peer can triage which hit to fetch without opening the body — worth adding a couple. Keep them few and generic; don't duplicate `branches`/`refs`. |
+| `metadata` | Optional structured object — **allow-listed keys only**, not free text: `status` (`"in-progress"` \| `"blocked"` \| `"done"`, for a workdone's lifecycle) and `supersedes` / `related_ids` (knowledge-entry ids, to link entries). |
 | `kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`. See "Choosing a `kind`" below. |
 
 **Choosing a `kind`** — pick the value that matches what the entry actually is:

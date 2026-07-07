@@ -101,7 +101,7 @@ Subtle gotcha: `query` is first run through Claude Haiku (`expandQuery`) to prod
 
 With no text query, results are ordered by `created_at desc` and the FTS+vector path is skipped (faster, no AI / embedding cost). At least one of `query | branches | repositories | refs | kind` is required.
 
-**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, refs, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone. (`tags` is returned but currently **always empty** — no MCP tool sets it — so don't triage on it.)
+**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, refs, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + `tags` to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
 
 After fetching: if the entry answers your question, use it and skip `create_knowledge`. If it's close but outdated or incomplete, `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the entry covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description.
 
@@ -142,7 +142,7 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 - You've seen a knowledge title referenced in a message from another agent and want to read it — pass `name`
 - You're about to call `update_knowledge` and need the current content to merge against
 
-**Workflow pattern**: `search_knowledge` → scan titles + `kind` → `get_knowledge({ id })` for the top promising hit → decide use / update / create.
+**Workflow pattern**: `search_knowledge` → scan titles + `kind` + `tags` → `get_knowledge({ id })` for the top promising hit → decide use / update / create.
 
 **Do not use it** for discovery or partial-title lookup — `get_knowledge({ name })` requires the full exact title (case-insensitive). For anything fuzzy, use `search_knowledge`.
 
