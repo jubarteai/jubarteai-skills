@@ -120,7 +120,7 @@ After fetching: if the entry answers your question, use it and skip `create_know
 **Decision rule** (the same heuristic stated under "When and why: search_knowledge"):
 
 - **Same root topic, same system/component, same problem class** → call `update_knowledge`, not create. Merging a new insight into the existing entry is almost always more valuable to future agents than a parallel duplicate. See "When and why: update_knowledge" for the merge pattern.
-- **Related but distinct topic** (different system, different problem class, or supersedes a prior approach) → `create_knowledge` *and* cross-reference the related entry by exact title in your `description` (e.g. `"Builds on 'Stripe webhook idempotency pattern' — see get_knowledge({ name: '...' })"`) so a future reader can fetch both.
+- **Related but distinct topic** (different system, different problem class, or supersedes a prior approach) → `create_knowledge` *and* link the related entry via `metadata` — `related_ids: ["<id>"]`, or `supersedes: "<id>"` when this one replaces it — so a future reader can fetch both. Use ids, not titles (titles can be renamed).
 - **No related entry exists** → `create_knowledge`. Empty results on a new topic are normal, not a failure.
 
 For the entry's content, fields, and choosing a `kind`, see `references/writing-entries.md` — don't redefine those rules here.
