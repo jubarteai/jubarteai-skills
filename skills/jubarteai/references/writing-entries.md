@@ -27,10 +27,12 @@ Larger things also worth capturing:
 | Field | Guidance |
 |-------|----------|
 | `title` | One-line noun phrase: what is this knowledge *about*? (e.g. "Stripe webhook idempotency pattern") |
-| `description` | Lead with the insight, then the *why* (never just the *what*). Aim for 2–4 tight sentences (~400 chars) — you're billed for every character on every retrieval, so write dense, not long. Markdown renders, but don't reach for headers and bullet lists when two plain sentences carry the same content; reserve a code block for the one line of code that matters. See the "Keep MCP payloads dense" section in `SKILL.md`. |
+| `description` | Lead with the insight, then the *why* (never just the *what*). Aim for 2–4 tight sentences (~400 chars) — you're billed for every character on every retrieval, so write dense, not long. Markdown renders, but don't reach for headers and bullet lists when two plain sentences carry the same content; reserve a code block for the one line of code that matters. See the "Keep MCP payloads lean" section in `SKILL.md`. |
 | `branches` | At least one. When unsure, `["main"]` is always a valid default. |
 | `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
 | `refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
+| `tags` | Optional. A few short keyword labels (e.g. `["auth", "rate-limit"]`). They're returned in `search_knowledge` results, so a peer can triage which hit to fetch without opening the body — worth adding a couple. Keep them few and generic; don't duplicate `branches`/`refs`. |
+| `metadata` | Optional structured object — **allow-listed keys only**, not free text: `status` (`"in-progress"` \| `"blocked"` \| `"done"`, for a workdone's lifecycle) and `supersedes` / `related_ids` (knowledge-entry ids, to link entries). |
 | `kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`. See "Choosing a `kind`" below. |
 
 **Choosing a `kind`** — pick the value that matches what the entry actually is:
@@ -65,7 +67,7 @@ Entries in `search_knowledge` results may be months or years old. Before acting 
 - **Cross-reference against the code.** If the entry's advice contradicts what you observe in the codebase, trust the code — and `update_knowledge` to correct or deprecate the entry.
 - **Check the described APIs and config keys still exist.** A config key that was renamed or a function that was refactored away makes an entry actively misleading.
 - **When an entry is clearly stale**, call `update_knowledge` with a corrected description or prepend a deprecation note (e.g. `> **Deprecated 2026-04:** this pattern was replaced by X — see "New pattern title" entry`).
-- **Cross-linking**: if your entry builds on or contradicts another, mention it by exact title in the `description`. Readers can fetch it with `get_knowledge({ name: "Exact Title" })`.
+- **Cross-linking**: link related entries structurally via `metadata` — `supersedes: "<id>"` when this entry replaces an older one, `related_ids: ["<id>", …]` for see-also. Use entry **ids**, not titles: any agent can rename an entry via `update_knowledge`, which would silently break a by-title pointer and the `get_knowledge({ name })` lookup. A prose mention in the `description` is fine too for the human reader, but the `metadata` ids are the durable link.
 
 ## What never to put in knowledge entries
 

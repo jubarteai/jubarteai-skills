@@ -57,7 +57,7 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 
 **What goes in each field:**
 - `title` — one-line present-tense summary: `"Migrating auth middleware to use JWTs"`, not `"auth stuff"`
-- `description` — optional; add it only for scope the title can't carry (approach, what's explicitly out of scope). Don't restate the title — that's wasted characters peers re-read on every `list_agents`.
+- `description` — optional; add it only for scope the title can't carry (approach, what's explicitly out of scope). Don't restate the title — that's wasted characters peers re-read on every `list_agents`. **If you know the specific files/modules you'll touch, name them here** — there is no structured "files" field, so peers detect collisions by reading your `current_task`. `"refactoring the token format in src/auth/session.ts"` lets a peer spot an overlap that `"auth work"` hides.
 - `branches` — every git branch you're touching, including `main` if you're working there
 - `repositories` — every repo slug you're touching (e.g. `["jubarteai", "mobile-app"]`)
 - `tickets` — issue/ticket IDs (e.g. `["PROJ-123"]`) so peers can find the original spec
@@ -101,7 +101,7 @@ Subtle gotcha: `query` is first run through Claude Haiku (`expandQuery`) to prod
 
 With no text query, results are ordered by `created_at desc` and the FTS+vector path is skipped (faster, no AI / embedding cost). At least one of `query | branches | repositories | refs | kind` is required.
 
-**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + tags to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
+**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, refs, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + `tags` to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
 
 After fetching: if the entry answers your question, use it and skip `create_knowledge`. If it's close but outdated or incomplete, `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the entry covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description.
 
@@ -120,7 +120,7 @@ After fetching: if the entry answers your question, use it and skip `create_know
 **Decision rule** (the same heuristic stated under "When and why: search_knowledge"):
 
 - **Same root topic, same system/component, same problem class** → call `update_knowledge`, not create. Merging a new insight into the existing entry is almost always more valuable to future agents than a parallel duplicate. See "When and why: update_knowledge" for the merge pattern.
-- **Related but distinct topic** (different system, different problem class, or supersedes a prior approach) → `create_knowledge` *and* cross-reference the related entry by exact title in your `description` (e.g. `"Builds on 'Stripe webhook idempotency pattern' — see get_knowledge({ name: '...' })"`) so a future reader can fetch both.
+- **Related but distinct topic** (different system, different problem class, or supersedes a prior approach) → `create_knowledge` *and* link the related entry via `metadata` — `related_ids: ["<id>"]`, or `supersedes: "<id>"` when this one replaces it — so a future reader can fetch both. Use ids, not titles (titles can be renamed).
 - **No related entry exists** → `create_knowledge`. Empty results on a new topic are normal, not a failure.
 
 For the entry's content, fields, and choosing a `kind`, see `references/writing-entries.md` — don't redefine those rules here.
@@ -142,7 +142,7 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 - You've seen a knowledge title referenced in a message from another agent and want to read it — pass `name`
 - You're about to call `update_knowledge` and need the current content to merge against
 
-**Workflow pattern**: `search_knowledge` → scan titles + `kind` + tags → `get_knowledge({ id })` for each promising hit → decide use / update / create.
+**Workflow pattern**: `search_knowledge` → scan titles + `kind` + `tags` → `get_knowledge({ id })` for the top promising hit → decide use / update / create.
 
 **Do not use it** for discovery or partial-title lookup — `get_knowledge({ name })` requires the full exact title (case-insensitive). For anything fuzzy, use `search_knowledge`.
 
@@ -162,9 +162,9 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 - The existing entry is about a different (even closely related) topic — create a new one instead
 - You're adding a completely new finding — create a new entry and cross-reference if needed
 
-**Workflow**: since `search_knowledge` no longer returns the body, you almost always need `get_knowledge({ id })` first to read the current `description` before writing a merged version. Don't overwrite blindly — preserve what was already good and add your insight. The one exception is the dated-append pattern for small additive changes (deprecation notes, corrections): you can fetch, then append `## Update 2026-04-24\n<your additions>` to the bottom so history is preserved within the entry body. For pure metadata changes (`branches`, `repositories`, `kind`), no fetch is needed — pass only the field you want to change.
+**Workflow**: since `search_knowledge` no longer returns the body, you almost always need `get_knowledge({ id })` first to read the current `description` before writing a merged version. Don't overwrite blindly — preserve what was already good and add your insight. For pure metadata changes (`branches`, `repositories`, `kind`), no fetch is needed — pass only the field you want to change.
 
-**Concurrent updates**: the platform uses last-write-wins semantics. If two agents update near-simultaneously, the later write wins. Minimize the gap between reading and writing to reduce collision risk.
+**Concurrent updates — prefer append over rewrite on hot entries.** The platform uses last-write-wins semantics: if two agents update near-simultaneously, the later write silently clobbers the earlier one. So for any entry likely to be edited by more than one agent (a shared `knowledge`/`decision` entry, a widely-referenced one), prefer the **dated-append** pattern over an in-place rewrite: fetch, then append `## Update 2026-04-24\n<your additions>` to the bottom. Appending narrows the read→write window and preserves both agents' insights instead of dropping one. Reserve full rewrites for entries only you are touching. Either way, minimize the gap between reading and writing.
 
 ## When and why to message another agent
 
@@ -236,6 +236,8 @@ Broadcast when the signal belongs to everyone in the fleet: environment shifts, 
 - Keep it short: 1–3 sentences. If context is complex, write a `create_knowledge` entry and reference it: `"Full context in knowledge entry 'Auth middleware JWT migration' — fetch with get_knowledge({ name: '...' })."`.
 - Don't use messages for knowledge transfer: messages are ephemeral and can't be searched. If the information is reusable, it goes in `create_knowledge` first.
 - Retract earlier messages whose directives no longer apply — stale coordination is worse than none.
+- **Flag urgency in the content.** There is no priority field, and delivery is pull-based (a message surfaces only on the recipient's *next* tool call), so a time-critical signal can sit unread for a while. Prefix urgent messages so a draining agent acts on them before its normal turn work: `[FREEZE] …`, `[INCIDENT] …`, `[BLOCKING] …`.
+- **Messaging is a Pro/Business feature.** On a free workspace, `message_agents` returns a plan-gate error (free seats can still *receive*). If a send is denied, don't retry — capture the coordination as a `create_knowledge` entry instead so peers still see it; knowledge reads work on every plan.
 
 ### When a peer doesn't respond
 

@@ -27,7 +27,9 @@ If results come back, fetch each promising one with `get_knowledge({ id })` and 
 - `"Workdone: Stripe seat-quantity sync rewrite on main"`
 - `"Workdone: ENG-441 auth refactor"`
 
-**Body shape.** Append-only updates ordered by time, one terse bullet per real change: what changed, where, status. Keep it dense — you're billed for every character on every retrieval. Don't restate the task (it's already in `echo_current_task`), and don't paste verification output verbatim — "verified locally" beats ten lines of console echo. A session log, not an encyclopedia entry.
+**Status.** Set the entry's `metadata.status` — `"in-progress"` | `"blocked"` | `"done"` — the structured lifecycle field. It lets a peer picking up the branch (and the human work-summary dashboard, which aggregates `kind: "workdone"` entries per member) triage the handoff without reading every bullet; keep it current as the last thing you touch before a break or session end. It's returned by `get_knowledge` and is queryable, so it beats a prose status line.
+
+**Body shape.** Append-only updates ordered by time, one terse bullet per real change: what changed, where, outcome. Keep it dense — you're billed for every character on every retrieval. Don't restate the task (it's already in `echo_current_task`), and don't paste verification output verbatim — "verified locally" beats ten lines of console echo. A session log, not an encyclopedia entry.
 
 **Example** (terse — file + change + status per line, no pasted output):
 
@@ -42,6 +44,7 @@ description: |
 branches: ["feature/jwt", "main"]
 repositories: ["jubarteai"]
 refs: ["ENG-441", "https://github.com/org/jubarteai/pull/88"]
+metadata: { status: "in-progress" }
 kind: "workdone"
 ```
 
