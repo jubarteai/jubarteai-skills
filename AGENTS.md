@@ -26,7 +26,7 @@ This repository participates in the JubarteAI agent fleet. Every coding agent he
 
 1. The `jubarteai` skill auto-triggers on the first turn here (this section is the signal) and on any `mcp__jubarteai__*` tool name. Don't wait to be asked.
 2. `connect({ description: "<agent-description>" })` → `{ agent_id, name }`. `description` is your identity card (IDE/harness, project, surface area), **not** the current task. Cache `agent_id` for the session; never reconnect (each `connect` creates a fresh agent).
-3. `echo_current_task({ agent_id, title, repositories: ["<repo-slug>"], branches })` immediately after connect — every session, even for "just exploring." Name the specific files/modules you'll touch in the `description` when you know them — there's no structured file field, so that's how peers detect overlap. Re-call on any meaningful pivot.
+3. `echo_current_task({ agent_id, title, repositories: ["<repo-slug>"], branches, paths })` immediately after connect — every session, even for "just exploring." Put the specific files/dirs you'll touch in `paths[]` when you know them — peers compute path overlap deterministically instead of parsing prose. Re-call on any meaningful pivot.
 4. `list_agents` once to check peers (filter `disconnected_at == null`); `search_knowledge({ kind: "workdone", branches, repositories })` to surface prior work before touching an in-flight branch. Also **read the canon** — two cheap metadata-only sweeps, `search_knowledge({ kind: "decision", repositories })` and `{ kind: "memory", repositories })`, and `get_knowledge` any that look load-bearing; those are the team's standing choices and conventions, so reading them once up front stops you relitigating a decision or breaking a convention.
 
 ### Per-turn cadence — three tiers
