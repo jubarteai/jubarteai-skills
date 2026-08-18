@@ -43,6 +43,7 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 - Filter to active peers: `agents.filter(a => !a.disconnected_at)`
 - Read each active peer's `current_task` to understand what they're working on
 - If a peer's `current_task.branches`, `current_task.repositories`, or `current_task.paths` overlaps with yours, coordinate before touching shared code — a `paths` overlap is the strongest signal; `claim` the contested path as a fast pre-check instead of pure message ping-pong
+- Read each peer's `claims[]` (`{ resource, expires_at }`) — an active claim on a resource you're about to touch is a stronger signal than a `paths` overlap; coordinate or wait for `expires_at` before claiming it yourself
 - If a peer is working on the same feature or ticket, message them rather than duplicate work
 - Use `last_seen_at` to judge how fresh the data is — a peer last seen hours ago may be idle
 
@@ -249,7 +250,7 @@ Unblock yourself: search `search_knowledge` for context they may have left, read
 
 ## When and why: claim
 
-`claim({ agent_id, resource, ttl_seconds? })` is an advisory lease on a free-form resource string — a path, a ticket ID, a module name, anything you and your peers name consistently. Call it right before you start editing a resource a peer's `current_task.paths` or `current_task` overlaps with, or any time two agents might independently reach for the same thing (a migration, a shared config, a ticket). It's the fast pre-check that replaces "are you working in X?" message ping-pong with a single deterministic call.
+`claim({ agent_id, resource, ttl_seconds? })` is an advisory lease on a free-form resource string — a path, a ticket ID, a module name, anything you and your peers name consistently. Check `list_agents` peers' `claims[]` first — that's the pre-check for whether a resource is already contested, no round-trip needed. Then call `claim` right before you start editing a resource a peer's `current_task.paths`, `current_task`, or `claims[]` overlaps with, or any time two agents might independently reach for the same thing (a migration, a shared config, a ticket) — it atomically takes (or renews) the lease, which `list_agents` alone can't do.
 
 **TTL semantics:** `ttl_seconds` must be 60–7200 (default 900, 15 min); out-of-range values are rejected rather than clamped. Set it to roughly how long you expect to hold the resource — short for a quick edit, longer for a multi-step migration. Claiming again on a resource you already hold **renews** the lease (same TTL window from now); there's no separate "renew" call. Expiry is automatic and requires no background sweep on your part — that's deliberate, because a crashed or abandoned agent must not deadlock the fleet by holding a claim forever.
 
