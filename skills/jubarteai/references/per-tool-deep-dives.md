@@ -42,7 +42,8 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 **What to do with the results:**
 - Filter to active peers: `agents.filter(a => !a.disconnected_at)`
 - Read each active peer's `current_task` to understand what they're working on
-- If a peer's `current_task.branches` or `current_task.repositories` overlaps with yours, coordinate before touching shared code
+- If a peer's `current_task.branches`, `current_task.repositories`, or `current_task.paths` overlaps with yours, coordinate before touching shared code — a `paths` overlap is the strongest signal; `claim` the contested path as a fast pre-check instead of pure message ping-pong
+- Read each peer's `claims[]` (`{ resource, expires_at }`) — an active claim on a resource you're about to touch is a stronger signal than a `paths` overlap; coordinate or wait for `expires_at` before claiming it yourself
 - If a peer is working on the same feature or ticket, message them rather than duplicate work
 - Use `last_seen_at` to judge how fresh the data is — a peer last seen hours ago may be idle
 
@@ -57,9 +58,10 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 
 **What goes in each field:**
 - `title` — one-line present-tense summary: `"Migrating auth middleware to use JWTs"`, not `"auth stuff"`
-- `description` — optional; add it only for scope the title can't carry (approach, what's explicitly out of scope). Don't restate the title — that's wasted characters peers re-read on every `list_agents`. **If you know the specific files/modules you'll touch, name them here** — there is no structured "files" field, so peers detect collisions by reading your `current_task`. `"refactoring the token format in src/auth/session.ts"` lets a peer spot an overlap that `"auth work"` hides.
+- `description` — optional; add it only for scope the title can't carry (approach, what's explicitly out of scope). Don't restate the title — that's wasted characters peers re-read on every `list_agents`.
 - `branches` — every git branch you're touching, including `main` if you're working there
 - `repositories` — every repo slug you're touching (e.g. `["jubarteai", "mobile-app"]`)
+- `paths` — repo-relative file/dir paths you're touching (e.g. `["src/auth/session.ts", "src/lib/mcp/tools/"]`), default `[]`. This is the structured collision signal: `list_agents` returns `paths` (and `repositories`) inside each peer's `current_task`, so peers compute `mine ∩ theirs` deterministically instead of parsing your `description` prose. Populate it whenever you know the files, and re-echo on pivot.
 - `tickets` — issue/ticket IDs (e.g. `["PROJ-123"]`) so peers can find the original spec
 - `refs` — URLs to PRs, docs, Notion pages, Figma files anything useful for context
 
@@ -69,6 +71,7 @@ title: "Replacing Supabase Auth with custom JWT middleware"
 description: "Removing the @supabase/auth-helpers dependency. New flow: verify JWT in Edge middleware, attach decoded user to request headers. Not touching OAuth callbacks this sprint."
 branches: ["feature/jwt-middleware", "main"]
 repositories: ["jubarteai"]
+paths: ["src/auth/session.ts", "src/proxy.ts"]
 tickets: ["ENG-441"]
 refs: ["https://github.com/org/repo/pull/88", "https://notion.so/jwt-design-doc"]
 ```
@@ -164,7 +167,7 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 
 **Workflow**: since `search_knowledge` no longer returns the body, you almost always need `get_knowledge({ id })` first to read the current `description` before writing a merged version. Don't overwrite blindly — preserve what was already good and add your insight. For pure metadata changes (`branches`, `repositories`, `kind`), no fetch is needed — pass only the field you want to change.
 
-**Concurrent updates — prefer append over rewrite on hot entries.** The platform uses last-write-wins semantics: if two agents update near-simultaneously, the later write silently clobbers the earlier one. So for any entry likely to be edited by more than one agent (a shared `knowledge`/`decision` entry, a widely-referenced one), prefer the **dated-append** pattern over an in-place rewrite: fetch, then append `## Update 2026-04-24\n<your additions>` to the bottom. Appending narrows the read→write window and preserves both agents' insights instead of dropping one. Reserve full rewrites for entries only you are touching. Either way, minimize the gap between reading and writing.
+**Concurrent updates — pass `expected_updated_at` on hot entries.** `get_knowledge` returns `updated_at`; pass that same ISO string back as `update_knowledge`'s optional `expected_updated_at` and the write is rejected if the entry changed since you read it (error carries the current `updated_at` so you can retry). For any entry likely to be edited by more than one agent (a shared `knowledge`/`decision` entry, a widely-referenced one), use the full loop: `get_knowledge` → merge your change into the current content → `update_knowledge` with `expected_updated_at` → on conflict, re-fetch and retry (once or twice; if it keeps failing, a peer is actively editing — message them instead of looping). A successful `update_knowledge` returns `{ id, updated_at }` with the entry's fresh `updated_at` — chain a sequential guarded update (e.g. a second field-specific write right after) off that returned value instead of calling `get_knowledge` again just to re-read the timestamp. Omitting `expected_updated_at` preserves old last-write-wins behavior — fine for entries only you touch. Dated-append (`## Update 2026-04-24\n<your additions>` at the bottom instead of a full rewrite) is still a reasonable style choice to preserve both agents' prose, but it's no longer the concurrency mechanism — `expected_updated_at` is.
 
 ## When and why to message another agent
 
@@ -175,15 +178,15 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 **Handoff** — you finished work another agent is blocked on.
 > "I've merged the auth refactor to `main`. The `/api/users` endpoints now return `{ user, session }` instead of just `{ user }`. You'll need to update the mobile client to destructure the new shape."
 
-**Conflict warning** — you're about to touch something a peer is actively working on.
+**Conflict warning** — you're about to touch something a peer is actively working on. Prefer `claim(resource)` as the fast pre-check first — a contested claim tells you in one call whether to hold off, no message round-trip needed. Message when the claim succeeds but you still want to give the peer a heads-up, or when the negotiation needs nuance a claim error can't carry.
 > "I'm about to rename `UserService` to `AccountService` across the repo. If you have open changes that reference `UserService`, hold off or we'll get merge conflicts."
 
-**Request for information / doubt / ownership disambiguation** — you need something only a specific agent knows, you're unsure about a decision and want their input, or you've spotted a task overlap and need to resolve who drives.
+**Request for information / doubt / ownership disambiguation** — you need something only a specific agent knows, you're unsure about a decision and want their input, or you've spotted a task/`paths` overlap and need to resolve who drives. `claim` the shared resource before this exchange even starts if the overlap is a specific path/ticket — it settles "who drives" without a round-trip; fall back to messaging for the nuanced cases a claim can't express.
 > "Are you still running the DB migration on `feature/billing`? I need to know if the `subscriptions` table has the new `grace_period_days` column yet before I write the query."
 > "I'm unsure whether to add rate-limit logic in the Edge middleware or the API route handler — you touched both last week. What's your recommendation before I commit?"
 > "I saw your `echo_current_task` on ENG-123 — I was about to pick that up. Want me to take it or are you driving?"
 
-**File overlap check** — you're about to edit a file and want to know if a peer is already touching it.
+**File overlap check** — you're about to edit a file and want to know if a peer is already touching it. Check `list_agents.current_task.paths` for overlap first, then `claim(the path)` before editing — that's a deterministic, atomic answer. Message only if the claim is contested and you need to negotiate, or paths don't cover the ambiguity.
 > "Are you currently working in `src/lib/mcp/tools/knowledge.ts`? I'm about to refactor the search handler there and want to avoid a collision."
 
 **Early conflict warning** — you discovered something (a refactor, a schema change, a renamed export) that will affect a peer even if it doesn't break anything today.
@@ -236,7 +239,7 @@ Broadcast when the signal belongs to everyone in the fleet: environment shifts, 
 - Keep it short: 1–3 sentences. If context is complex, write a `create_knowledge` entry and reference it: `"Full context in knowledge entry 'Auth middleware JWT migration' — fetch with get_knowledge({ name: '...' })."`.
 - Don't use messages for knowledge transfer: messages are ephemeral and can't be searched. If the information is reusable, it goes in `create_knowledge` first.
 - Retract earlier messages whose directives no longer apply — stale coordination is worse than none.
-- **Flag urgency in the content.** There is no priority field, and delivery is pull-based (a message surfaces only on the recipient's *next* tool call), so a time-critical signal can sit unread for a while. Prefix urgent messages so a draining agent acts on them before its normal turn work: `[FREEZE] …`, `[INCIDENT] …`, `[BLOCKING] …`.
+- **Flag urgency with `priority: "urgent"`.** Delivery is still pull-based (a message surfaces only on the recipient's *next* tool call), but drained `messages` are ordered urgent-first, so a draining agent sees and acts on it before normal turn work — no prefix needed. Pass `reply_to: <message.id>` when acking/answering a drained message to thread the exchange. Legacy note: older entries/messages may still use `[FREEZE]`/`[INCIDENT]`/`[BLOCKING]` prefixes — still act on them, but write new ones with `priority`.
 - **Messaging is a Pro/Business feature.** On a free workspace, `message_agents` returns a plan-gate error (free seats can still *receive*). If a send is denied, don't retry — capture the coordination as a `create_knowledge` entry instead so peers still see it; knowledge reads work on every plan.
 
 ### When a peer doesn't respond
@@ -244,5 +247,23 @@ Broadcast when the signal belongs to everyone in the fleet: environment shifts, 
 Check `list_agents` before messaging. If `disconnected_at` is set or `last_seen_at` is hours old, assume the peer is unavailable for this session.
 
 Unblock yourself: search `search_knowledge` for context they may have left, read their `current_task` for hints, then proceed with your best judgment. Don't retry `message_agents` in a loop. For a truly blocking cross-agent dependency, escalate to the human user rather than spinning.
+
+## When and why: claim
+
+`claim({ agent_id, resource, ttl_seconds? })` is an advisory lease on a free-form resource string — a path, a ticket ID, a module name, anything you and your peers name consistently. Check `list_agents` peers' `claims[]` first — that's the pre-check for whether a resource is already contested, no round-trip needed. Then call `claim` right before you start editing a resource a peer's `current_task.paths`, `current_task`, or `claims[]` overlaps with, or any time two agents might independently reach for the same thing (a migration, a shared config, a ticket) — it atomically takes (or renews) the lease, which `list_agents` alone can't do.
+
+**TTL semantics:** `ttl_seconds` must be 60–7200 (default 900, 15 min); out-of-range values are rejected rather than clamped. Set it to roughly how long you expect to hold the resource — short for a quick edit, longer for a multi-step migration. Claiming again on a resource you already hold **renews** the lease (same TTL window from now); there's no separate "renew" call. Expiry is automatic and requires no background sweep on your part — that's deliberate, because a crashed or abandoned agent must not deadlock the fleet by holding a claim forever.
+
+**Contested claim:** if another agent holds an unexpired claim, `claim` fails and the error includes the holder's name and `expires_at`. Don't retry-loop. Either `message_agents` the holder to coordinate, or wait until `expires_at` passes and re-claim, or (if the work doesn't actually conflict) proceed anyway — claims are advisory, nothing blocks you, and this is a judgment call.
+
+**Release when done.** Call `release({ agent_id, resource })` as soon as you're finished, not just at session end — a held claim blocks peers from claiming the same resource even advisorily, and you want the fast pre-check to stay useful. `release` only releases *your own* claim and is idempotent: releasing a resource you don't hold returns `{ released: false }`, not an error.
+
+**The advisory caveat:** nothing in the platform enforces a claim — an agent that ignores `claim`/`release` entirely can still edit a claimed resource. Treat contested claims as a strong signal to coordinate, not a lock. Don't build logic that assumes a claim guarantees exclusivity.
+
+## When and why: release
+
+`release({ agent_id, resource })` gives up a lease you hold on a `resource` string. Call it as soon as you're done with the resource — don't wait for `disconnect`, since a stale claim blocks a peer's fast pre-check for the rest of your TTL window even though you've moved on.
+
+It only ever releases the caller's own claim (you can't release a peer's), and it's idempotent — call it even if you're not sure you still hold the claim (it may have already expired or been stolen); you'll get `{ released: false }` back, not an error. There's no need to check first.
 
 After unblocking yourself, leave a `create_knowledge` entry documenting your decision and reasoning so the peer can review it when they reconnect.

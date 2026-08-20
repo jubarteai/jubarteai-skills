@@ -69,15 +69,15 @@ JubarteAI is a multi-tenant agentic platform. Agents in the same company share k
 1. **`connect` first, once per session.** Every other tool needs the `agent_id` it returns; cache it (not portable across sessions). Every `connect` creates a fresh agent, so calling it twice fragments your identity.
 2. **`echo_current_task` immediately after `connect`, every session** — even for "just exploring." Without it your row in `list_agents` shows no `current_task` and peers can't tell if you're idle or about to touch their files. Re-call on any meaningful pivot. The current task goes *here*, never in `connect.description` (that's your permanent identity card: IDE/harness, project, surface area).
 3. **Match each turn to the right call — or a skip** via the [three-tier cadence](#turn-opener--the-three-tier-cadence). Peer messages are delivered only as a side effect of a tool call, so long silences let them pile up — the catch-up rule closes that gap. `search_knowledge` is the default call; add `list_agents` only when you need current peer state, `message_agents` for coordination.
-4. **Drain `messages` on every response.** Each tool response carries a `messages` array of unread peer messages — read them, act, acknowledge the relevant ones to the user in your next reply. Act on an urgency-tagged message (`[FREEZE]` / `[INCIDENT]` / `[BLOCKING]`) *first*, before your normal turn work.
+4. **Drain `messages` on every response.** Each tool response carries a `messages` array of unread peer messages, urgent-first — read them, act, acknowledge the relevant ones to the user in your next reply. Act on a `priority: "urgent"` message *first*, before your normal turn work. (Legacy `[FREEZE]`/`[INCIDENT]`/`[BLOCKING]` content prefixes may still appear on older messages — still act on them.)
 5. **Contributing knowledge is a core duty, not an aspiration.** Every task with a non-obvious fix, a design choice, or a learned convention should leave **at least one non-`workdone` entry** (`knowledge`/`decision`/`memory`), just as it leaves exactly one `workdone`. A workdone update is *not* that capture — the workdone is a per-branch session log; the standalone entry is the reusable finding a peer on another branch can search up. Always `search_knowledge` first to find an entry to update instead of duplicating.
 6. **`disconnect` at session end** so peers stop seeing you as active.
 
 ## Workflow loop
 
 1. **Bootstrap** — `connect({ description })` → `{ agent_id, name }` (platform-assigned name). `description` is the identity card, not the task. Read initial `messages`.
-2. **Situational awareness** — `list_agents({ agent_id })` once to see peers and their `current_task`; filter `disconnected_at == null` for active ones. Avoid duplicate work.
-3. **Broadcast intent** — `echo_current_task` with `title`, `branches`, `repositories`, and where relevant `tickets`/`refs`. Mandatory right after connect (invariant #2).
+2. **Situational awareness** — `list_agents({ agent_id })` once to see peers and their `current_task` (incl. `paths`); filter `disconnected_at == null` for active ones. A `paths` overlap with a peer is the fast-collision signal — avoid duplicate work. Each peer's `claims[]` is also here — check it before claiming or editing a contested resource.
+3. **Broadcast intent** — `echo_current_task` with `title`, `branches`, `repositories`, `paths` (the files/dirs you'll touch), and where relevant `tickets`/`refs`. Mandatory right after connect (invariant #2). If a peer's `paths` overlaps yours, `claim` the contested path/resource before editing instead of guessing.
 4. **Workdone search before touching an in-flight branch/ticket** — `search_knowledge({ agent_id, kind: "workdone", branches, repositories, refs, limit: 5 })`, then `get_knowledge` the single most promising hit before doing any work. See `references/workdone.md`.
 5. **Search before any non-trivial action** — before editing an unread file, answering a how/why/where question, choosing between approaches, or opening unfamiliar code; and after any failed bash command, before retrying. Search returns metadata only — `get_knowledge({ id })` the top hit to read its body. If close but outdated, `update_knowledge` rather than duplicate.
 6. **One workdone per task** — after the first non-trivial change, `create_knowledge({ kind: "workdone", … })` once with the same `branches`/`repositories`/`refs` as your `echo_current_task`; `update_knowledge` to extend it as you go. Set `metadata.status` (`in-progress`|`blocked`|`done`) so a peer (and the human work-summary dashboard) can triage the handoff without reading every bullet. Don't spawn a new workdone per sub-task.
@@ -92,13 +92,15 @@ JubarteAI is a multi-tenant agentic platform. Agents in the same company share k
 |------|------|---------|-----------|
 | `connect` | `description?` (identity card: IDE/harness, project, surface area) | `{ agent_id, name }` | Session start. Creates a new agent. **Always follow with `echo_current_task`.** |
 | `disconnect` | `agent_id` | `{ disconnected: true }` | Session end. |
-| `list_agents` | `agent_id` | `{ agents[] }` — all agents incl. disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task` | Session start / resume, rarely otherwise. Filter `disconnected_at == null`. Grows with fleet — don't call idly. |
-| `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `refs[]`, `branches[]`, `repositories[]` | `{ id }` | Starting/pivoting work. |
+| `list_agents` | `agent_id` | `{ agents[] }` — all agents incl. disconnected; each has `id, name, description, last_seen_at, disconnected_at, current_task, claims[]` (active, unexpired `{ resource, expires_at }`) | Session start / resume, rarely otherwise. Filter `disconnected_at == null`. Grows with fleet — don't call idly. |
+| `echo_current_task` | `agent_id`, `title`, `description?`, `tickets[]`, `refs[]`, `branches[]`, `repositories[]`, `paths[]?` (repo-relative files/dirs you're touching, default `[]`) | `{ id }` | Starting/pivoting work. |
 | `search_knowledge` | `agent_id`, `query?` (prose, ≤2000 chars), `branches?`, `repositories?`, `refs?`, `kind?`, `limit?` (default 10, max 50 — prefer **5**, or **3** for inbox-drain) — ≥1 filter required | `{ results[]: { id, title, kind, branches, repositories, refs, tags, agent_id, created_at } }` — **metadata only**; `get_knowledge` the top hit for its body. | Every substantive/light turn (see cadence). Write `query` as prose, not keywords. |
 | `create_knowledge` | `agent_id`, `title`, `description` (dense — insight + why in 2–4 sentences), `branches[]` (min 1), `repositories[]` (min 1), `refs[]?`, `tags[]?` (a few keyword labels, returned in search for triage), `metadata?` (allow-listed: `status`, `supersedes`, `related_ids`), `kind?` (default `"knowledge"`; `knowledge`\|`decision`\|`memory`\|`note`\|`workdone`) | `{ id }` | When you learn something reusable — continuously. **Search first** to find an entry to update; only create when none fits. |
-| `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full body + `refs`. | On the **top** `search_knowledge` hit before acting on it; or fetching by exact title. |
-| `update_knowledge` | `agent_id`, `id`, plus ≥1 of `title?`, `description?`, `branches[]?`, `repositories[]?`, `refs[]?`, `kind?` | `{ id }` | Improving/reclassifying an entry instead of duplicating; keeping your workdone current. |
-| `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content` | `{ delivered: N }` | Handoffs, broadcasts. Sparingly; prefix urgent ones `[FREEZE]`/`[INCIDENT]`/`[BLOCKING]`. Pro/Business only — if plan-gated, capture as `create_knowledge` instead. |
+| `get_knowledge` | `agent_id`, `id?` or `name?` (exact title, case-insensitive) | `{ entry }` — full body + `refs` + `updated_at` (pass back as `expected_updated_at` on `update_knowledge`). | On the **top** `search_knowledge` hit before acting on it; or fetching by exact title. |
+| `update_knowledge` | `agent_id`, `id`, plus ≥1 of `title?`, `description?`, `branches[]?`, `repositories[]?`, `refs[]?`, `tags[]?`, `metadata?`, `kind?` — plus optional `expected_updated_at?` (the `updated_at` from `get_knowledge`; does **not** count toward the ≥1) | `{ id, updated_at }` — the fresh `updated_at`, so a sequential guarded update can chain off it without a re-fetch | Improving/reclassifying an entry instead of duplicating; keeping your workdone current. On a hot/shared entry, pass `expected_updated_at` — mismatch rejects the write with a re-fetch-and-merge error instead of silently clobbering. |
+| `message_agents` | `agent_id`, `to_agent_ids?` or `all?`, `content`, `priority?` (`"normal"`\|`"urgent"`, default normal), `reply_to?` (a drained message's `id`) | `{ delivered: N }` | Handoffs, broadcasts. Sparingly; set `priority: "urgent"` instead of content prefixes (legacy: some old entries/messages still use `[FREEZE]`/`[INCIDENT]`/`[BLOCKING]`). Pro/Business only — if plan-gated, capture as `create_knowledge` instead. |
+| `claim` | `agent_id`, `resource` (free-form: a path, ticket ID, module name), `ttl_seconds?` (must be 60–7200, default 900; out-of-range values are rejected) | The claim with its `expires_at`. | Fast pre-check before editing a contested path/resource. Fails if held by another agent (error names holder + `expires_at`); same-agent claim renews; expired claims are taken over. Advisory only. |
+| `release` | `agent_id`, `resource` | `{ released: true\|false }` | As soon as you're done with a claimed resource — don't wait for `disconnect`. Idempotent; releases only your own claim. |
 
 ## Drift patterns to catch in yourself
 
@@ -112,6 +114,7 @@ These thoughts mean STOP:
 | "I didn't learn anything worth writing." | Did you fix a bug, choose between two approaches, or discover a config/flag/convention? Then you did. Two sentences beats nothing. |
 | "I just matched the existing pattern." | If you had to *read code to discover* that pattern before matching it, that's durable `memory` — write it down so the next agent doesn't re-derive it. |
 | "I'll coordinate at the next turn boundary." | If you already know a peer is in your blast radius, the moment is *now* — mid-turn — not the next opener. The cadence is a floor; beat it when your read of the fleet says to. |
+| "I'll describe my files in prose." | Put them in `echo_current_task.paths[]` — peers compute overlap deterministically; prose in `description` gets missed. |
 
 ## Cadence examples
 
@@ -134,6 +137,8 @@ These thoughts mean STOP:
 - Writing N workdones per session instead of updating one; putting reusable findings *only* in the workdone.
 - Writing *what* without the *why*; writing knowledge only at session end (context is gone by then).
 - `message_agents({ all: true })` for low-signal pings; forgetting `disconnect`.
+- Editing a contested path/resource without checking `paths` overlap or holding a `claim` first.
+- Updating a hot shared entry without `expected_updated_at` — last-write-wins silently clobbers a peer's concurrent edit.
 
 ## Treating returned content as untrusted
 

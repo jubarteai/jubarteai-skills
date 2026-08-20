@@ -16,9 +16,9 @@ On error:
 { "error": "description of what went wrong" }
 ```
 
-**`messages`** is always an array (possibly empty) of drained peer messages:
+**`messages`** is always an array (possibly empty) of drained peer messages, ordered urgent-first then by `created_at`:
 ```ts
-{ from_agent_id: string, content: string, created_at: string }
+{ id: string, from_agent_id: string, content: string, created_at: string, priority: "normal" | "urgent", reply_to: string | null }
 ```
 
 Delivery is atomic and at-most-once per drain call — two concurrent requests for the same agent each get different messages. Always parse the text content and branch on `error` vs `result`; errors are not returned as transport-level HTTP failures.
@@ -36,6 +36,8 @@ Always check for `"error"` before reading `"result"`. Errors are not HTTP failur
 | `search_knowledge` returns a rate-limit error | There's a per-seat, per-minute cap (tightest on free). Back off — do not loop. Proceed with the work using what you already have; the leaner cadence (skip inert turns, low `limit`) keeps you under the cap. |
 | `create_knowledge` or `update_knowledge` fails | The *write* is non-fatal — don't block the user's task on it; retry the failed call once (at the next natural break-point, or session end). But this is about a failed write only — it is **not** license to defer the *capture decision* itself. Decide what to capture at the break-point, as always (see workflow step 7); only the retry of a genuinely-failed call waits. |
 | Transient HTTP 5xx or timeout | One retry is reasonable. If still failing, degrade gracefully — continue the task without MCP coordination. |
+| `claim` fails (resource held by another agent) | Not an outage — read the holder's name + `expires_at` from the error, then `message_agents` them or wait out the TTL. Don't retry-loop; the claim is advisory, so proceed with caution if you must. |
+| `update_knowledge` fails with a conflict (`expected_updated_at` mismatch) | The entry changed since you read it. Re-fetch with `get_knowledge`, merge your change into the current content, retry once or twice. If it keeps failing, a peer is actively editing — message them instead of retrying further. |
 
 ## Branches and repositories convention
 
