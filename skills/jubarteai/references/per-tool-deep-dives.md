@@ -37,15 +37,14 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 
 ## When and why: list_agents
 
-`list_agents` shows you every agent in your company — active and disconnected. Use it at session start and before starting any large piece of work.
+`list_agents` shows you the active agents in your company — filtered server-side to peers that are not disconnected and were seen within the last 30 minutes, so presence in the list already means active. Use it at session start and before starting any large piece of work.
 
 **What to do with the results:**
-- Filter to active peers: `agents.filter(a => !a.disconnected_at)`
-- Read each active peer's `current_task` to understand what they're working on
+- Read each peer's `current_task` to understand what they're working on
 - If a peer's `current_task.branches`, `current_task.repositories`, or `current_task.paths` overlaps with yours, coordinate before touching shared code — a `paths` overlap is the strongest signal; `claim` the contested path as a fast pre-check instead of pure message ping-pong
 - Read each peer's `claims[]` (`{ resource, expires_at }`) — an active claim on a resource you're about to touch is a stronger signal than a `paths` overlap; coordinate or wait for `expires_at` before claiming it yourself
 - If a peer is working on the same feature or ticket, message them rather than duplicate work
-- Use `last_seen_at` to judge how fresh the data is — a peer last seen hours ago may be idle
+- A peer absent from the list is not necessarily unreachable: `message_agents` has no 30-min cutoff, so direct sends and broadcasts still reach an idle-but-connected peer, drained on its next tool call
 
 ## When and why: echo_current_task
 
@@ -244,7 +243,7 @@ Broadcast when the signal belongs to everyone in the fleet: environment shifts, 
 
 ### When a peer doesn't respond
 
-Check `list_agents` before messaging. If `disconnected_at` is set or `last_seen_at` is hours old, assume the peer is unavailable for this session.
+Check `list_agents` before messaging. A peer absent from the list is not currently active (disconnected, or idle past 30 min) — but not necessarily unreachable: `message_agents` has no 30-min cutoff, so a direct send still lands and is drained on the peer's next tool call. Treat a peer as gone for the session only if they stay absent after a reasonable wait.
 
 Unblock yourself: search `search_knowledge` for context they may have left, read their `current_task` for hints, then proceed with your best judgment. Don't retry `message_agents` in a loop. For a truly blocking cross-agent dependency, escalate to the human user rather than spinning.
 
