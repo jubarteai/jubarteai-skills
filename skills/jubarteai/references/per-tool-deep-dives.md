@@ -41,7 +41,7 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 
 **What to do with the results:**
 - Read each peer's `current_task` to understand what they're working on
-- If a peer's `current_task.branches`, `current_task.repositories`, or `current_task.paths` overlaps with yours, coordinate before touching shared code — a `paths` overlap is the strongest signal; `claim` the contested path as a fast pre-check instead of pure message ping-pong
+- If a peer's `current_task.branches`, `current_task.repositories`, or `current_task.paths` overlaps with yours, coordinate before touching shared code — a `paths` overlap is the strongest signal; `claim` the contested resource as a fast pre-check instead of pure message ping-pong. Read the overlap by runtime mode: shared checkout → live collision; separate worktrees → merge-conflict forecast (same file/different functions: proceed and expect a trivial merge; same function/RPC/migration/contract: settle who lands first; same ticket: someone stops)
 - Read each peer's `claims[]` (`{ resource, expires_at }`) — an active claim on a resource you're about to touch is a stronger signal than a `paths` overlap; coordinate or wait for `expires_at` before claiming it yourself
 - If a peer is working on the same feature or ticket, message them rather than duplicate work
 - A peer absent from the list is not necessarily unreachable: `message_agents` has no 30-min cutoff, so direct sends and broadcasts still reach an idle-but-connected peer, drained on its next tool call
@@ -60,7 +60,7 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 - `description` — optional; add it only for scope the title can't carry (approach, what's explicitly out of scope). Don't restate the title — that's wasted characters peers re-read on every `list_agents`.
 - `branches` — every git branch you're touching, including `main` if you're working there
 - `repositories` — every repo slug you're touching (e.g. `["jubarteai", "mobile-app"]`)
-- `paths` — repo-relative file/dir paths you're touching (e.g. `["src/auth/session.ts", "src/lib/mcp/tools/"]`), default `[]`. This is the structured collision signal: `list_agents` returns `paths` (and `repositories`) inside each peer's `current_task`, so peers compute `mine ∩ theirs` deterministically instead of parsing your `description` prose. Populate it whenever you know the files, and re-echo on pivot.
+- `paths` — repo-relative file/dir paths you're touching (e.g. `["src/auth/session.ts", "src/lib/mcp/tools/"]`), default `[]`. This is the structured collision signal: `list_agents` returns `paths` (and `repositories`) inside each peer's `current_task`, so peers compute `mine ∩ theirs` deterministically instead of parsing your `description` prose. Populate it whenever you know the files, and re-echo on pivot. Overlap means "we'll collide now" in a shared checkout and "we'll conflict at merge" across worktrees — either way it's worth knowing before the edit, not after.
 - `tickets` — issue/ticket IDs (e.g. `["PROJ-123"]`) so peers can find the original spec
 - `refs` — URLs to PRs, docs, Notion pages, Figma files anything useful for context
 
@@ -185,7 +185,7 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 > "I'm unsure whether to add rate-limit logic in the Edge middleware or the API route handler — you touched both last week. What's your recommendation before I commit?"
 > "I saw your `echo_current_task` on ENG-123 — I was about to pick that up. Want me to take it or are you driving?"
 
-**File overlap check** — you're about to edit a file and want to know if a peer is already touching it. Check `list_agents.current_task.paths` for overlap first, then `claim(the path)` before editing — that's a deterministic, atomic answer. Message only if the claim is contested and you need to negotiate, or paths don't cover the ambiguity.
+**File overlap check** — you're about to edit a file and want to know if a peer is already touching it. Check `list_agents.current_task.paths` for overlap first, then `claim` before editing — the path itself in a shared checkout, the semantic unit (`rpc:`, `migration:`, `contract:`) in a worktree fleet — that's a deterministic, atomic answer. Message only if the claim is contested and you need to negotiate merge order, or paths don't cover the ambiguity.
 > "Are you currently working in `src/lib/mcp/tools/knowledge.ts`? I'm about to refactor the search handler there and want to avoid a collision."
 
 **Early conflict warning** — you discovered something (a refactor, a schema change, a renamed export) that will affect a peer even if it doesn't break anything today.
@@ -253,7 +253,9 @@ Unblock yourself: search `search_knowledge` for context they may have left, read
 
 **TTL semantics:** `ttl_seconds` must be 60–7200 (default 900, 15 min); out-of-range values are rejected rather than clamped. Set it to roughly how long you expect to hold the resource — short for a quick edit, longer for a multi-step migration. Claiming again on a resource you already hold **renews** the lease (same TTL window from now); there's no separate "renew" call. Expiry is automatic and requires no background sweep on your part — that's deliberate, because a crashed or abandoned agent must not deadlock the fleet by holding a claim forever.
 
-**Contested claim:** if another agent holds an unexpired claim, `claim` fails and the error includes the holder's name and `expires_at`. Don't retry-loop. Either `message_agents` the holder to coordinate, or wait until `expires_at` passes and re-claim, or (if the work doesn't actually conflict) proceed anyway — claims are advisory, nothing blocks you, and this is a judgment call.
+**Name the resource for the runtime mode.** In a shared checkout, a file path is the right unit — two agents editing one file corrupt each other's work. Across separate worktrees, git already isolates files; what still collides is the *semantic* unit — the function both of you are rewriting, the migration target, the RPC both branches DROP+CREATE, the shared type or API contract, the ticket. Claim that, with a consistent prefix so peers' claims are readable at a glance: `path:src/lib/mcp/messages.ts`, `rpc:agent_latest_tasks`, `migration:agent_tasks`, `contract:DrainedMessage`, `ticket:ENG-441`. A file claim in a worktree fleet over-blocks peers working on unrelated functions in the same file; a semantic claim catches the clobber git never flags.
+
+**Contested claim:** if another agent holds an unexpired claim, `claim` fails and the error includes the holder's name and `expires_at`. Don't retry-loop. In a shared checkout, wait for `expires_at` or `message_agents` the holder — editing under someone's live claim corrupts their work. Across worktrees, the usual right move is to message the holder (urgent if you're time-boxed), agree who lands first, and proceed on your branch expecting to rebase — waiting out the lease buys nothing when the files are already isolated. Claims are advisory, nothing blocks you; this is a judgment call about *merge order*, not permission.
 
 **Release when done.** Call `release({ agent_id, resource })` as soon as you're finished, not just at session end — a held claim blocks peers from claiming the same resource even advisorily, and you want the fast pre-check to stay useful. `release` only releases *your own* claim and is idempotent: releasing a resource you don't hold returns `{ released: false }`, not an error.
 
