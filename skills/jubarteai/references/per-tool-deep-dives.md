@@ -103,7 +103,7 @@ Subtle gotcha: `query` is first run through Claude Haiku (`expandQuery`) to prod
 
 With no text query, results are ordered by `created_at desc` and the FTS+vector path is skipped (faster, no AI / embedding cost). At least one of `query | branches | repositories | refs | kind` is required.
 
-**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, refs, tags, agent_id, created_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + `tags` to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone.
+**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, refs, tags, agent_id, created_at, paths, needs_verification, verified_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + `tags` to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone. Pass `needs_verification: true` (alone or with other filters) to pull the company's re-verification queue — entries a merged PR flagged via an overlapping `paths` entry, or that sat unverified for 90 days.
 
 After fetching: if the entry answers your question, use it and skip `create_knowledge`. If it's close but outdated or incomplete, `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the entry covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description.
 
@@ -135,6 +135,8 @@ For the entry's content, fields, and choosing a `kind`, see `references/writing-
 
 If neither hit had matched, you would `create_knowledge` with a 2-sentence description, `branches: ["main"]`, and the repo slug — then expand later via `update_knowledge`.
 
+**Set `paths[]`** when the entry asserts how specific files or modules behave — e.g. `["src/lib/mcp/tools/knowledge.ts"]` — so a merged PR touching them auto-flags the entry for re-verification. Skip it for general conventions or cross-cutting decisions with no fixed file set.
+
 ## When and why: get_knowledge
 
 `get_knowledge` is the **required follow-up to `search_knowledge`** — search returns only metadata, so you must fetch the body before acting on any result. It also fetches a known entry by exact `title`.
@@ -143,6 +145,7 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 - A `search_knowledge` result looks relevant and you want the body (the description is never returned in search) — pass `id` from the search result
 - You've seen a knowledge title referenced in a message from another agent and want to read it — pass `name`
 - You're about to call `update_knowledge` and need the current content to merge against
+- Checking an entry's verification state — the full record (`paths, needs_verification, verified_at, verified_by_seat_id, verified_by_agent_id, flagged_at, flag_source, flag_ref, flag_paths, flag_reason`) is only in `get_knowledge`, not in search results
 
 **Workflow pattern**: `search_knowledge` → scan titles + `kind` + `tags` → `get_knowledge({ id })` for the top promising hit → decide use / update / create.
 
@@ -159,6 +162,9 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 - The title is misleading and should be renamed (you can update `title` too)
 - The entry's `branches`, `repositories`, or `refs` are wrong or incomplete (you can update those too — e.g. attach a ticket ID retroactively after you learn one)
 - The entry's `kind` is wrong — e.g. a `note` has matured into a confirmed `knowledge` finding, or a `knowledge` entry actually documents an architectural decision and should be `decision`. Pass only `kind` to reclassify without touching other fields.
+- The entry's `paths` are stale — files it describes moved, or new ones should be tagged for auto-flagging.
+
+**Content edit = verification.** Changing `title` or `description` records you as verifier and clears `needs_verification` — the response's `verified_at` reflects this (`null` when the edit touched neither field). Branch/repo/ref/tag/kind/paths-only edits don't verify; use `verify_knowledge` if you just want to confirm the content without changing it.
 
 **Do not update when:**
 - The existing entry is about a different (even closely related) topic — create a new one instead
@@ -167,6 +173,12 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 **Workflow**: since `search_knowledge` no longer returns the body, you almost always need `get_knowledge({ id })` first to read the current `description` before writing a merged version. Don't overwrite blindly — preserve what was already good and add your insight. For pure metadata changes (`branches`, `repositories`, `kind`), no fetch is needed — pass only the field you want to change.
 
 **Concurrent updates — pass `expected_updated_at` on hot entries.** `get_knowledge` returns `updated_at`; pass that same ISO string back as `update_knowledge`'s optional `expected_updated_at` and the write is rejected if the entry changed since you read it (error carries the current `updated_at` so you can retry). For any entry likely to be edited by more than one agent (a shared `knowledge`/`decision` entry, a widely-referenced one), use the full loop: `get_knowledge` → merge your change into the current content → `update_knowledge` with `expected_updated_at` → on conflict, re-fetch and retry (once or twice; if it keeps failing, a peer is actively editing — message them instead of looping). A successful `update_knowledge` returns `{ id, updated_at }` with the entry's fresh `updated_at` — chain a sequential guarded update (e.g. a second field-specific write right after) off that returned value instead of calling `get_knowledge` again just to re-read the timestamp. Omitting `expected_updated_at` preserves old last-write-wins behavior — fine for entries only you touch. Dated-append (`## Update 2026-04-24\n<your additions>` at the bottom instead of a full rewrite) is still a reasonable style choice to preserve both agents' prose, but it's no longer the concurrency mechanism — `expected_updated_at` is.
+
+## When and why: verify_knowledge
+
+`verify_knowledge({ agent_id, id, expected_updated_at? })` confirms an entry still matches the code, without editing it. Call it once you've re-read the code under the entry's `paths` (or the area it describes) and confirmed it still holds — typically right after a `needs_verification: true` hit from `search_knowledge` or a `flag_reason` from `get_knowledge`. It clears `needs_verification` and sets `verified_at`/`verified_by_agent_id`/`verified_by_seat_id`, leaving `title`/`description` untouched.
+
+Use `update_knowledge` instead when the content itself needs a change — a content edit verifies too (see "Content edit = verification" above), so you never need both calls on the same finding. `expected_updated_at` guards against a concurrent edit exactly like `update_knowledge`: pass back `updated_at`, a mismatch returns a conflict telling you to re-fetch and retry. Refuses Notion rows (`source: "notion"`), same error style as `update_knowledge`.
 
 ## When and why to message another agent
 
