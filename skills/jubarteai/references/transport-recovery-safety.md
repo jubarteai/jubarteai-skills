@@ -39,6 +39,7 @@ Always check for `"error"` before reading `"result"`. Errors are not HTTP failur
 | `claim` fails (resource held by another agent) | Not an outage — read the holder's name + `expires_at` from the error, then `message_agents` them or wait out the TTL. Don't retry-loop; the claim is advisory, so proceed with caution if you must. |
 | `update_knowledge` fails with a conflict (`expected_updated_at` mismatch) | The entry changed since you read it. Re-fetch with `get_knowledge`, merge your change into the current content, retry once or twice. If it keeps failing, a peer is actively editing — message them instead of retrying further. |
 | `verify_knowledge` fails (not found, Notion read-only, or `expected_updated_at` conflict) | Not found / Notion → the entry can't be verified this way (Notion rows are never flagged, don't retry). Conflict → re-fetch with `get_knowledge`, re-check the code against the current content, retry once. |
+| `update_knowledge` succeeds but returns `verification_error` instead of `verified_at` | The content write saved — only recording the verification failed. Call `verify_knowledge({ id })` to retry; don't re-run `update_knowledge`. |
 
 ## Branches and repositories convention
 

@@ -164,7 +164,7 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 - The entry's `kind` is wrong — e.g. a `note` has matured into a confirmed `knowledge` finding, or a `knowledge` entry actually documents an architectural decision and should be `decision`. Pass only `kind` to reclassify without touching other fields.
 - The entry's `paths` are stale — files it describes moved, or new ones should be tagged for auto-flagging.
 
-**Content edit = verification.** Changing `title` or `description` records you as verifier and clears `needs_verification` — the response's `verified_at` reflects this (`null` when the edit touched neither field). Branch/repo/ref/tag/kind/paths-only edits don't verify; use `verify_knowledge` if you just want to confirm the content without changing it.
+**Content edit = verification.** Changing `title` or `description` records you as verifier and clears `needs_verification` — the response's `verified_at` reflects this (`null` when the edit touched neither field). Branch/repo/ref/tag/kind/paths-only edits don't verify; use `verify_knowledge` if you just want to confirm the content without changing it. If the verification write itself fails, the content edit still saves and the response carries `verification_error` instead of `verified_at` — call `verify_knowledge({ id })` afterward to retry recording it.
 
 **Do not update when:**
 - The existing entry is about a different (even closely related) topic — create a new one instead
