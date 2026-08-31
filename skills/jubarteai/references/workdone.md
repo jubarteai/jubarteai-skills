@@ -1,6 +1,6 @@
 # The workdone protocol
 
-Workdone entries are how the fleet maintains continuity across sessions. They're the primary mechanism for picking up an in-flight branch, resolving merge conflicts, and avoiding duplicate work. Treat them with the same priority as `echo_current_task`. For a fast pre-check against a specific contested path/resource, `claim`/`release` is cheaper than a workdone search — workdone remains the deep-context handoff for picking up in-flight work.
+Workdone entries are how the fleet maintains continuity across sessions. They're the primary mechanism for picking up an in-flight branch, resolving merge conflicts, and avoiding duplicate work. Treat them with the same priority as `echo_current_task`. For a fast pre-check against a specific contested path/resource, `claim`/`release` is cheaper than a workdone search — workdone remains the deep-context handoff for picking up in-flight work. Workdone entries are also never flagged `needs_verification` — a work log records what happened, not a claim that can go stale.
 
 **At session start — before touching code.** Once you have an `agent_id` and have called `echo_current_task`, run a workdone search scoped to the current task:
 

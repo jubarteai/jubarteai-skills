@@ -31,6 +31,7 @@ Larger things also worth capturing:
 | `branches` | At least one. When unsure, `["main"]` is always a valid default. |
 | `repositories` | At least one. Use the repo slug (e.g. `"jubarteai"`, `"mobile-app"`). When unsure, use the slug from `git remote get-url origin`. |
 | `refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
+| `paths` | Optional, default `[]`. Repo-relative file/dir paths the entry describes (e.g. `["src/lib/mcp/tools/knowledge.ts"]`). Set it on entries that assert how specific code behaves — a merged PR touching an overlapping path auto-flags the entry `needs_verification`. Matching ignores a leading `./` or `/` and a trailing `/`, and is case-sensitive. Skip for general conventions with no fixed file set. |
 | `tags` | Optional. A few short keyword labels (e.g. `["auth", "rate-limit"]`). They're returned in `search_knowledge` results, so a peer can triage which hit to fetch without opening the body — worth adding a couple. Keep them few and generic; don't duplicate `branches`/`refs`. |
 | `metadata` | Optional structured object — **allow-listed keys only**, not free text: `status` (`"in-progress"` \| `"blocked"` \| `"done"`, for a workdone's lifecycle) and `supersedes` / `related_ids` (knowledge-entry ids, to link entries). |
 | `kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`. See "Choosing a `kind`" below. |
@@ -62,12 +63,13 @@ refs: ["ENG-441", "https://github.com/org/jubarteai/pull/88"]
 
 ## Assessing entry freshness
 
-Entries in `search_knowledge` results may be months or years old. Before acting on an entry:
+Entries carry machine-readable freshness, not just age: `needs_verification` flags a possibly-stale entry, `verified_at` is the last confirmation, and a flagged entry's `flag_reason` (from `get_knowledge`) says why — a merged PR touched an overlapping `paths` entry, or it sat unverified 90 days. Creating an entry verifies it by its author; editing `title`/`description` re-verifies it.
 
-- **Cross-reference against the code.** If the entry's advice contradicts what you observe in the codebase, trust the code — and `update_knowledge` to correct or deprecate the entry.
-- **Check the described APIs and config keys still exist.** A config key that was renamed or a function that was refactored away makes an entry actively misleading.
-- **When an entry is clearly stale**, call `update_knowledge` with a corrected description or prepend a deprecation note (e.g. `> **Deprecated 2026-04:** this pattern was replaced by X — see "New pattern title" entry`).
-- **Cross-linking**: link related entries structurally via `metadata` — `supersedes: "<id>"` when this entry replaces an older one, `related_ids: ["<id>", …]` for see-also. Use entry **ids**, not titles: any agent can rename an entry via `update_knowledge`, which would silently break a by-title pointer and the `get_knowledge({ name })` lookup. A prose mention in the `description` is fine too for the human reader, but the `metadata` ids are the durable link.
+- **On a `needs_verification: true` hit**, read `flag_reason` first, then re-check the code yourself — don't trust the flag *or* the old content blindly. Still holds → `verify_knowledge({ id })`; needs a fix → `update_knowledge` (which verifies too).
+- **Cross-reference against the code even when not flagged.** A renamed key or refactored function can make an entry misleading before the 90-day sweep or a bound PR catches it. Trust the code; `update_knowledge` to correct or deprecate.
+- **When an entry is clearly stale**, prepend a deprecation note (e.g. `> **Deprecated 2026-04:** this pattern was replaced by X — see "New pattern title" entry`).
+- **Cross-linking**: link related entries structurally via `metadata` — `supersedes: "<id>"` when this entry replaces an older one, `related_ids: ["<id>", …]` for see-also. Use entry **ids**, not titles: any agent can rename an entry via `update_knowledge`, which would silently break a by-title pointer and the `get_knowledge({ name })` lookup.
+- **Verification is per-entry, not per-branch** — one `verify_knowledge` call clears the flag everywhere the entry is tagged, regardless of which branch/repo you're on.
 
 ## What never to put in knowledge entries
 
