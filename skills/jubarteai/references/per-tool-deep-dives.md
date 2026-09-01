@@ -111,6 +111,8 @@ After fetching: if the entry answers your question, use it and skip `create_know
 
 **Narrowing with `branches` and `repositories`**: pass the current branch plus `main` and the current repo slug to get the most focused results. Pass only `repositories` to search across all branches in a repo. Omit both for a company-wide search.
 
+**Zero results.** A *text-query* call (`query` set) that comes back with zero rows is logged as a company knowledge gap, fire-and-forget — a logging failure never turns into a search error. Two things never log: the metadata-only path (no `query` at all — an empty branches/repositories/refs/kind/paths/needs_verification lookup is expected, not a demand signal) and a whitespace-only `query` (nothing to embed or FTS-match, so it wouldn't be a real signal either). Repeated near-duplicate misses across the company — same normalized text, or a close embedding — cluster into one gap rather than piling up duplicates; see "When and why: list_knowledge_gaps" below. Write real prose here: a keyword-bag or throwaway query that misses still logs, so a sloppy `query` becomes a sloppy gap someone has to triage later. If you later learn the answer to something you searched for and came up empty on, just capture it the normal way — `create_knowledge`/`update_knowledge` — and if the new or edited entry's embedding lands close enough, it auto-resolves the gap and links back to your entry. No separate "resolve" call.
+
 ## When and why: create_knowledge
 
 `create_knowledge` is **never your first move on a finding** — search the existing knowledge base first, decide whether to update an existing entry, and only fall through to creating a new one when nothing relevant exists or the finding is a genuinely distinct topic.
@@ -181,6 +183,16 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 `verify_knowledge({ agent_id, id, expected_updated_at? })` confirms an entry still matches the code, without editing it. Call it once you've re-read the code under the entry's `paths` (or the area it describes) and confirmed it still holds — typically right after a `needs_verification: true` hit from `search_knowledge` or a `flag_reason` from `get_knowledge`. It clears `needs_verification` and sets `verified_at`/`verified_by_agent_id`/`verified_by_seat_id`, leaving `title`/`description` untouched.
 
 Use `update_knowledge` instead when the content itself needs a change — a content edit verifies too (see "Content edit = verification" above), so you never need both calls on the same finding. `expected_updated_at` guards against a concurrent edit exactly like `update_knowledge`: pass back `updated_at`, a mismatch returns a conflict telling you to re-fetch and retry. Refuses Notion rows (`source: "notion"`), same error style as `update_knowledge`.
+
+## When and why: list_knowledge_gaps
+
+`list_knowledge_gaps({ agent_id, status?, limit? })` surfaces the company's queue of clustered zero-result searches — questions the fleet asked `search_knowledge` and came up empty on (see "Zero results" above). It's not a per-turn call: check it when you have spare context in an area you already know well, or at a natural pause between tasks, as a source of a next, self-directed task.
+
+`status` defaults to `"open"` (the queue worth working); pass `"answered"` or `"dismissed"` to review closed gaps — useful for seeing what a peer already answered before you duplicate it.
+
+**Answering one is nothing special.** Just `create_knowledge` (or `update_knowledge` a near-matching existing entry) the way you normally would. If the entry's embedding lands close enough to the gap's centroid, the gap auto-resolves and links to your entry — there's no dedicated "answer this gap" MCP call. (The dashboard's Answer button is a human-facing shortcut that pre-creates an empty draft and points the user at the editor — not a pattern to replicate here.)
+
+**Check `last_filters` before assuming it's real missing knowledge.** Each gap carries the branches/repositories/refs/paths/kind that were active on the most recent miss that joined it. A gap whose `last_filters` is narrow — a specific `paths` entry, an unusual `branches` value — may just be a search that was filtered too tightly, not a genuine absence of knowledge on the topic. Run a broader `search_knowledge` first; don't spend effort writing an entry that already exists outside that filter.
 
 ## When and why to message another agent
 
