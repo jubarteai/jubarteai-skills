@@ -103,7 +103,9 @@ Subtle gotcha: `query` is first run through Claude Haiku (`expandQuery`) to prod
 
 With no text query, results are ordered by `created_at desc` and the FTS+vector path is skipped (faster, no AI / embedding cost). At least one of `query | branches | repositories | refs | kind` is required.
 
-**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, refs, tags, agent_id, created_at, paths, needs_verification, verified_at`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + `tags` to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone. Pass `needs_verification: true` (alone or with other filters) to pull the company's re-verification queue — entries a merged PR flagged via an overlapping `paths` entry, or that sat unverified for 90 days.
+**How to interpret results:** results return **metadata only** — `id, title, kind, branches, repositories, refs, tags, agent_id, created_at, paths, needs_verification, verified_at, superseded_by`. There is no `description` body in the search response. Use the title + `kind` (e.g. `decision` vs `note` signals weight) + `tags` to decide which results look promising, then **call `get_knowledge({ id: result.id })` to read the body before acting**. Never assume an entry's content from its title alone. Pass `needs_verification: true` (alone or with other filters) to pull the company's re-verification queue — entries a merged PR flagged via an overlapping `paths` entry, or that sat unverified for 90 days.
+
+**Supersession and recency ranking:** an entry another same-company entry's `metadata.supersedes` points at is excluded from results by default — on every path, including a `needs_verification: true` queue search (a superseded entry no longer needs re-verification). Pass `include_superseded: true` (a modifier, not a filter — it doesn't by itself satisfy the ≥1-filter requirement) to see it anyway; each returned row then also carries `superseded_by` (uuid, otherwise null). Query-path results are additionally recency-weighted: a fused match's rank decays with the entry's age (measured from the later of its last edit or last `verify_knowledge`), floored so an old-but-uniquely-relevant hit still surfaces — re-verifying or editing an entry refreshes its rank without a body change. Metadata-only (no-query) ordering stays `created_at desc`, unaffected by decay.
 
 After fetching: if the entry answers your question, use it and skip `create_knowledge`. If it's close but outdated or incomplete, `update_knowledge` rather than creating a duplicate. **Update vs. create heuristic**: update if the entry covers the same root topic, the same system/component, and the same problem class — all three must match. If the problem or system differs even slightly, create a new entry and cross-reference the related one in the description.
 
@@ -122,7 +124,7 @@ After fetching: if the entry answers your question, use it and skip `create_know
 **Decision rule** (the same heuristic stated under "When and why: search_knowledge"):
 
 - **Same root topic, same system/component, same problem class** → call `update_knowledge`, not create. Merging a new insight into the existing entry is almost always more valuable to future agents than a parallel duplicate. See "When and why: update_knowledge" for the merge pattern.
-- **Related but distinct topic** (different system, different problem class, or supersedes a prior approach) → `create_knowledge` *and* link the related entry via `metadata` — `related_ids: ["<id>"]`, or `supersedes: "<id>"` when this one replaces it — so a future reader can fetch both. Use ids, not titles (titles can be renamed).
+- **Related but distinct topic** (different system, different problem class, or supersedes a prior approach) → `create_knowledge` *and* link the related entry via `metadata` — `related_ids: ["<id>"]` for a see-also, or `supersedes: "<id>"` when this one replaces it. Prefer `supersedes` over leaving two live entries whenever peers should stop finding the old one — it removes the old entry from `search_knowledge`'s default recall (visible again only via `include_superseded: true`), rather than letting both compete in results. Use ids, not titles (titles can be renamed).
 - **No related entry exists** → `create_knowledge`. Empty results on a new topic are normal, not a failure.
 
 For the entry's content, fields, and choosing a `kind`, see `references/writing-entries.md` — don't redefine those rules here.
@@ -157,7 +159,7 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 
 **Update when:**
 - The entry is correct but missing important context you now have
-- You found a better fix or a newer approach that supersedes what's written
+- You found a better fix or a newer approach that refines what's already written **in place** — edit it. If the new approach is different enough to deserve its own entry, `create_knowledge` a new one with `metadata.supersedes` pointing at this one instead — that now beats leaving both live, since it removes this entry from `search_knowledge`'s default recall
 - The entry's `description` is sparse and you can make it more useful
 - The title is misleading and should be renamed (you can update `title` too)
 - The entry's `branches`, `repositories`, or `refs` are wrong or incomplete (you can update those too — e.g. attach a ticket ID retroactively after you learn one)
