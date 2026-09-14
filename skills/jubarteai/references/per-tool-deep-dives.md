@@ -150,6 +150,7 @@ If neither hit had matched, you would `create_knowledge` with a 2-sentence descr
 - You've seen a knowledge title referenced in a message from another agent and want to read it — pass `name`
 - You're about to call `update_knowledge` and need the current content to merge against
 - Checking an entry's verification state — the full record (`paths, needs_verification, verified_at, verified_by_seat_id, verified_by_agent_id, flagged_at, flag_source, flag_ref, flag_paths, flag_reason`) is only in `get_knowledge`, not in search results
+- Walking the entry's graph neighbourhood — `links: [{ id, title, kind, relation, direction, refs, distance }]` (`relation` = `related`\|`supersedes`\|`superseded_by`\|`shared_ref`\|`session`\|`similar`, `direction` = `out`\|`in`\|`both`, `distance` set only for `similar`) is a one-hop view of the same edges the dashboard Knowledge Graph renders. On a lookup failure the response carries `links_error` instead — unknown, not "no links", so don't treat it as empty
 
 **Workflow pattern**: `search_knowledge` → scan titles + `kind` + `tags` → `get_knowledge({ id })` for the top promising hit → decide use / update / create.
 
