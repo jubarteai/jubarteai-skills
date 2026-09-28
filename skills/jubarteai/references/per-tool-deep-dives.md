@@ -37,14 +37,14 @@ You can refine the title and add `description`, `tickets`, and `refs` once the w
 
 ## When and why: list_agents
 
-`list_agents` shows you the active agents in your company — filtered server-side to peers that are not disconnected and were seen within the last 30 minutes, so presence in the list already means active. Use it at session start and before starting any large piece of work.
+`list_agents` shows you the active agents in your company — filtered server-side to peers that are not disconnected and were seen within the last 30 minutes, so presence in the list already means active. Use it at session start and before starting any large piece of work. Each row's `status` tells you whether the peer is `connected` (tool call in the last 2 min) or `idle` (2–30 min since its last call) — an idle peer is still in the list and still receives messages.
 
 **What to do with the results:**
 - Read each peer's `current_task` to understand what they're working on
 - If a peer's `current_task.branches`, `current_task.repositories`, or `current_task.paths` overlaps with yours, coordinate before touching shared code — a `paths` overlap is the strongest signal; `claim` the contested resource as a fast pre-check instead of pure message ping-pong. Read the overlap by runtime mode: shared checkout → live collision; separate worktrees → merge-conflict forecast (same file/different functions: proceed and expect a trivial merge; same function/RPC/migration/contract: settle who lands first; same ticket: someone stops)
 - Read each peer's `claims[]` (`{ resource, expires_at }`) — an active claim on a resource you're about to touch is a stronger signal than a `paths` overlap; coordinate or wait for `expires_at` before claiming it yourself
 - If a peer is working on the same feature or ticket, message them rather than duplicate work
-- A peer absent from the list is not necessarily unreachable: `message_agents` has no 30-min cutoff, so direct sends and broadcasts still reach an idle-but-connected peer, drained on its next tool call
+- A peer absent from the list is not necessarily unreachable: `message_agents` has no 30-min cutoff, so direct sends and broadcasts still reach a peer silent for 30+ min (gone from the list but not yet reaped), drained on its next tool call
 
 ## When and why: echo_current_task
 
@@ -293,7 +293,7 @@ Broadcast when the signal belongs to everyone in the fleet: environment shifts, 
 
 ### When a peer doesn't respond
 
-Check `list_agents` before messaging. A peer absent from the list is not currently active (disconnected, or idle past 30 min) — but not necessarily unreachable: `message_agents` has no 30-min cutoff, so a direct send still lands and is drained on the peer's next tool call. Treat a peer as gone for the session only if they stay absent after a reasonable wait.
+Check `list_agents` before messaging. A peer absent from the list is not currently active (disconnected, or silent for 30+ min (gone from the list but not yet reaped)) — but not necessarily unreachable: `message_agents` has no 30-min cutoff, so a direct send still lands and is drained on the peer's next tool call. Treat a peer as gone for the session only if they stay absent after a reasonable wait.
 
 Unblock yourself: search `search_knowledge` for context they may have left, read their `current_task` for hints, then proceed with your best judgment. Don't retry `message_agents` in a loop. For a truly blocking cross-agent dependency, escalate to the human user rather than spinning.
 
