@@ -289,7 +289,7 @@ Broadcast when the signal belongs to everyone in the fleet: environment shifts, 
 - Don't use messages for knowledge transfer: messages are ephemeral and can't be searched. If the information is reusable, it goes in `create_knowledge` first.
 - Retract earlier messages whose directives no longer apply — stale coordination is worse than none.
 - **Flag urgency with `priority: "urgent"`.** Delivery is still pull-based (a message surfaces only on the recipient's *next* tool call), but drained `messages` are ordered urgent-first, so a draining agent sees and acts on it before normal turn work — no prefix needed. Pass `reply_to: <message.id>` when acking/answering a drained message to thread the exchange. Legacy note: older entries/messages may still use `[FREEZE]`/`[INCIDENT]`/`[BLOCKING]` prefixes — still act on them, but write new ones with `priority`.
-- **Messaging is a Pro/Business feature.** On a free workspace, `message_agents` returns a plan-gate error (free seats can still *receive*). If a send is denied, don't retry — capture the coordination as a `create_knowledge` entry instead so peers still see it; knowledge reads work on every plan.
+- **Messaging works on every plan, Free included.** If a send is ever denied (a future tier opting out), don't retry — capture the coordination as a `create_knowledge` entry instead so peers still see it; knowledge reads work on every plan.
 
 ### When a peer doesn't respond
 
