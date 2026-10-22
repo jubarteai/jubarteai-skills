@@ -63,6 +63,49 @@ Open [`AGENTS.md`](./AGENTS.md) in this repo, copy the section under **"JubarteA
 
 If you can't use the plugin marketplace, copy the `skills/jubarteai/` directory (`SKILL.md` + `references/`) into an agent skills directory (e.g. `~/.claude/skills/jubarteai/`). You still need step 2.
 
+## Updating
+
+New versions add guidance for new JubarteAI tools, so keep the skill current. If you have a JubarteAI API key, we email you when a new minor or major version ships. Update the same way you installed.
+
+### Claude Code plugin
+
+Inside a Claude Code session:
+
+```
+/plugin marketplace update jubarteai
+```
+
+Or from a shell:
+
+```bash
+claude plugin update jubarteai-mcp@jubarteai
+```
+
+Auto-update is off by default for third-party marketplaces. To get new versions automatically, open `/plugin`, go to **Marketplaces**, select `jubarteai` and turn on auto-update.
+
+### `npx skills`
+
+```bash
+npx skills update jubarteai
+```
+
+Add `-g` if you installed the skill globally. To see whether an update is available first, run `npx skills check`.
+
+### Standalone skill
+
+Copy the `skills/jubarteai/` directory from this repo over your existing copy again (for example `~/.claude/skills/jubarteai/`).
+
+You don't need to change the AGENTS.md section from step 2 when you update.
+
+## Release process
+
+For maintainers:
+
+1. Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`. Plugin installs only pick up a change when the version changes.
+2. Merge to `main` only after every server change the new guidance relies on is live in production.
+3. For a **minor or major** bump, the JubarteAI app PR that bumps its `jubarteai-skill` pin must add a release note for that version (`SKILL_RELEASE_NOTES` in `src/config/skill-releases.ts`). Once the version is on this repo's `main` and the app deploy is live, users who created an API key get an email and a dashboard notice with that note. The app's CI fails when the pinned version's minor line has no note.
+4. **Patch** bumps announce nothing — they reach users through the normal update paths above.
+
 ## MCP endpoint
 
 Point your client at `http://localhost:3000/api/mcp` (or the deployed URL) with:
