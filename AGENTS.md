@@ -14,7 +14,7 @@ A **copy-paste template** for teams installing the JubarteAI skill. Copy the "Ju
 | `<agent-description>` | One-line **identity card** — who/what this agent *is* (IDE/harness, project, surface area), not what it's working on. | `"Claude Code (Cursor) on the myapp Next.js monorepo — auth, billing, API"` |
 
 4. **Multi-repo / monorepo?** Pass all slugs: `repositories: ["api", "web", "docs"]`. Pick one slug convention and use it consistently across agents.
-5. **Verify:** run a session — `connect` returns an `agent_id`, and `list_agents` shows your agent with `disconnected_at: null`.
+5. **Verify:** run a session — `connect` returns an `agent_id`, and `list_agents` lists your agent with `status: "connected"`.
 
 ---
 
@@ -26,22 +26,23 @@ This repository participates in the JubarteAI agent fleet. Every coding agent he
 
 1. The `jubarteai` skill auto-triggers on the first turn here (this section is the signal) and on any `mcp__jubarteai__*` tool name. Don't wait to be asked.
 2. `connect({ description: "<agent-description>" })` → `{ agent_id, name }`. `description` is your identity card (IDE/harness, project, surface area), **not** the current task. Cache `agent_id` for the session; never reconnect (each `connect` creates a fresh agent).
-3. `echo_current_task({ agent_id, title, repositories: ["<repo-slug>"], branches, paths })` immediately after connect — every session, even for "just exploring." Put the specific files/dirs you'll touch in `paths[]` when you know them — peers compute path overlap deterministically instead of parsing prose. Re-call on any meaningful pivot.
-4. `list_agents` once to check peers (filter `disconnected_at == null`); `search_knowledge({ kind: "workdone", branches, repositories })` to surface prior work before touching an in-flight branch. Also **read the canon** — two cheap metadata-only sweeps, `search_knowledge({ kind: "decision", repositories })` and `{ kind: "memory", repositories })`, and `get_knowledge` any that look load-bearing; those are the team's standing choices and conventions, so reading them once up front stops you relitigating a decision or breaking a convention.
+3. `echo_current_task({ agent_id, title, repositories: ["<repo-slug>"], branches, paths })` immediately after connect — every session, even for "just exploring." Put the specific files/dirs you'll touch in `paths[]` when you know them — peers compute path overlap deterministically instead of parsing prose. Read the `overlaps` it returns — a peer listed there shares your paths, branch or ticket, so check their workdone and message them before you edit shared code. Re-call on any meaningful pivot.
+4. `list_agents` once to check peers (it lists only active agents); `search_knowledge({ kind: "workdone", branches, repositories })` to surface prior work before touching an in-flight branch. Also **read the canon** — two cheap metadata-only sweeps, `search_knowledge({ kind: "decision", repositories })` and `{ kind: "memory", repositories })`, and `get_knowledge` any that look load-bearing; those are the team's standing choices and conventions, so reading them once up front stops you relitigating a decision or breaking a convention.
 
 ### Per-turn cadence — three tiers
 
 A turn is any inbound user message. Match the call to the turn — every fetched result stays in context for the rest of the session. Rule of thumb: **drain the inbox before you act on the world**, so a queued freeze/merge warning surfaces before you edit, commit, or push.
 
 - **Inert meta-turn → skip** (no MCP call): *entering* plan mode, a subagent-return or background-task notification you're only noting, and pure acknowledgements / AskUserQuestion answers that start no work.
-- **Light real turn → inbox-drain**: `search_knowledge({ agent_id, repositories: ["<repo-slug>"], limit: 3 })`, no `query` — on commit / push / docs-only turns, and whenever you cross back into acting after a quiet stretch (*exiting* plan mode to implement, or acting on a subagent's finding).
+- **Light real turn → `check_inbox({ agent_id })`** — messages only, so an empty inbox costs a few characters (don't drain with a no-query `search_knowledge`, which returns ~3k chars of unrelated metadata). Use it on commit / push / docs-only turns, and whenever you cross back into acting after a quiet stretch (*exiting* plan mode to implement, or acting on a subagent's finding).
 - **Substantive turn → real search**: prose `query` describing the work + `repositories`, `limit: 5`.
-- **Catch-up:** peer messages arrive only as a side effect of a tool call, so the first turn where you resume acting after skipped turns opens with a drain (or substantive search) before anything else. Also search the symptom after any failed bash / test / lint / type-check error, before the next fix.
+- **Catch-up:** peer messages arrive only as a side effect of a tool call, so the first turn where you resume acting after skipped turns opens with `check_inbox` (or a substantive search) before anything else. Also search the symptom after any failed bash / test / lint / type-check error, before the next fix.
 - **Beyond the tiers — your judgment:** the tiers are the *floor*. When you *know* a peer is in your blast radius (same file / type / migration / contract), or your change will affect the fleet, coordinate *now*, mid-turn — `search_knowledge` their recent work before you collide, `message_agents` them before you break them, and capture a reusable finding the moment it's fresh. Gate it on a concrete trigger (named peer, shared surface), not anxiety.
 
 ### Core duties
 
 - **Drain `messages`** on every response; acknowledge the relevant ones to the user.
+- **Answer peers; don't leave replies waiting** — reply to a message that asks you something with `message_agents({ agent_id, reply_to, content })`, and `check_inbox` right before you block on your human (a question, plan approval, or ending a turn on a question).
 - **Capture reusable findings as their own entry** — a root cause, config/flag, decision, or team convention belongs in a `knowledge`/`decision`/`memory` entry, *not* just a workdone bullet (a peer on another branch only finds the standalone entry; the workdone is a per-branch log). Search before creating so you update instead of duplicating. Keep one workdone per task, updated as you go.
 - **Keep payloads lean both ways** — dense authored bodies (~400 chars, always keep the *why*); low `limit` (5 / 3), fetch only the top hit's body, call `list_agents` rarely.
 - **`disconnect`** at session end so peers see you as inactive.
