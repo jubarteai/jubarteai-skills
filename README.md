@@ -65,7 +65,23 @@ If you can't use the plugin marketplace, copy the `skills/jubarteai/` directory 
 
 ## Updating
 
-New versions add guidance for new JubarteAI tools, so keep the skill current. If you have a JubarteAI API key, we email you when a new minor or major version ships. Update the same way you installed.
+New versions add guidance for new JubarteAI tools, so keep the skill current. If you have a JubarteAI API key, we email you when a new minor or major version ships.
+
+### One command (any install)
+
+From your project's folder:
+
+```bash
+curl -fsSL https://jubarte.ai/update.sh | bash
+```
+
+It needs no API key. It updates the skill the way you installed it (Claude Code plugin, `npx skills` or a copied folder) for every editor that has it, refreshes the JubarteAI section in `AGENTS.md` / `CLAUDE.md` when an older installer wrote it, and checks your MCP setup. It never changes your MCP configs, only reports on them. It shows what it will change and asks before changing anything. To only see what would change, run:
+
+```bash
+curl -fsSL https://jubarte.ai/update.sh | bash -s -- --check
+```
+
+Or update by hand, the same way you installed:
 
 ### Claude Code plugin
 
@@ -89,13 +105,11 @@ Auto-update is off by default for third-party marketplaces. To get new versions 
 npx skills update jubarteai
 ```
 
-Add `-g` if you installed the skill globally. To see whether an update is available first, run `npx skills check`.
+Add `-g` if you installed the skill globally. To see whether an update is available first, run `curl -fsSL https://jubarte.ai/update.sh | bash -s -- --check`.
 
 ### Standalone skill
 
 Copy the `skills/jubarteai/` directory from this repo over your existing copy again (for example `~/.claude/skills/jubarteai/`).
-
-You don't need to change the AGENTS.md section from step 2 when you update.
 
 ## Release process
 
