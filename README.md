@@ -13,21 +13,41 @@ Repo: https://github.com/jubarteai/jubarteai-skills
 
 - **Shared knowledge base** — agents write and search reusable entries (bug fixes, architectural decisions, config quirks, integration steps). Every agent in your fleet can read and update any entry.
 - **Live fleet awareness** — see every active agent, what they're working on, and which branches and repos they're touching. Catch overlapping work before it causes merge conflicts.
-- **Peer messaging** — direct messages and company-wide broadcasts, delivered as a side effect of every MCP call. No polling, no separate channel.
+- **Peer messaging** — direct messages and company-wide broadcasts, delivered as a side effect of every JubarteAI call (and injected by a hook on harnesses that support it). No polling, no separate channel.
+- **A command-line client** — agents use the `jubarteai` CLI (`jubarteai search-knowledge`, `jubarteai inbox`, …); the same tools remain available as MCP tools as a fallback.
 - **Workflow guidance built in** — the skill instructs Claude on when and why to use each tool, common mistakes to avoid, and how to handle error recovery, session resumption, and multi-agent coordination.
 
 ## Installation
 
-Installation is two steps: install the plugin (ships the skill), then add the per-project section to your repo's `AGENTS.md` / `CLAUDE.md`. **Both are required** — the plugin carries the reusable playbook, but the AGENTS.md section carries your project-specific identity (`<repo-slug>`, `<agent-description>`) and is always in context, which is what reliably triggers the session-start workflow. The skill alone is lazy-loaded and can't know your project's values.
+Installation is two parts: the **`jubarteai` CLI** (agents talk to JubarteAI through it) and the **skill** with the per-project section in your repo's `AGENTS.md` / `CLAUDE.md`. **Both are required** — the skill carries the reusable playbook, but the AGENTS.md section carries your project-specific identity (`<repo-slug>`, `<agent-description>`) and is always in context, which is what reliably triggers the session-start workflow. The skill alone is lazy-loaded and can't know your project's values.
 
-### 1. Install the plugin (Claude Code, recommended)
+### 1. Install the CLI and set up your repo (recommended)
+
+```bash
+npm i -g jubarteai && jubarteai init
+```
+
+Needs Node 22 or newer. `jubarteai init` signs you in (a browser login), binds the repo to a workspace, installs this skill for the coding agents it finds, adds the AGENTS.md section below, and — each behind its own prompt — adds a permission rule and hooks for your harness and removes any old JubarteAI MCP entry. Re-running it is safe.
+
+Prefer a one-liner? These install the CLI and run `init` for you:
+
+```bash
+curl -fsSL https://jubarte.ai/install.sh | bash        # macOS / Linux
+irm https://jubarte.ai/install.ps1 | iex               # Windows PowerShell
+```
+
+Pass an API key only as the `JUBARTEAI_TOKEN` environment variable, never as an argument. Run `jubarteai --help` for the full command list, `jubarteai doctor` to check the setup.
+
+### 2. Install the skill by itself (if you skipped `init`'s skill step)
+
+#### Claude Code plugin
 
 ```
 /plugin marketplace add jubarteai/jubarteai-skills
 /plugin install jubarteai-mcp@jubarteai
 ```
 
-The skill is then available as `/jubarteai-mcp:jubarteai` and auto-triggers whenever the JubarteAI MCP tools are detected.
+The skill is then available as `/jubarteai-mcp:jubarteai` and auto-triggers whenever a `jubarteai` command or the JubarteAI MCP tools are in play. (The plugin keeps its `jubarteai-mcp` name so existing installs update in place.)
 
 To test the plugin locally before publishing:
 
@@ -37,7 +57,7 @@ claude --plugin-dir /path/to/jubarteai-skill
 /reload-plugins
 ```
 
-### Alternative: install via `npx skills` (multi-agent)
+#### `npx skills` (multi-agent)
 
 If your team uses multiple coding agents (Cursor, Codex, OpenCode, Gemini CLI, GitHub Copilot, etc.) or you'd rather not depend on the Claude Code plugin marketplace, install the skill with Vercel's `npx skills` CLI:
 
@@ -53,19 +73,31 @@ npx skills add jubarteai/jubarteai-skills --skill jubarteai -a claude-code
 
 Supported agent ids include `claude-code`, `codex`, `cursor`, `opencode`, `gemini-cli`, `github-copilot`, and others — see [vercel-labs/skills](https://github.com/vercel-labs/skills) for the full list.
 
-You still need step 2.
+#### Standalone skill (no plugin)
 
-### 2. Add the AGENTS.md section to your project
+If you can't use the plugin marketplace, copy the `skills/jubarteai/` directory (`SKILL.md` + `references/`) into an agent skills directory (e.g. `~/.claude/skills/jubarteai/`).
 
-Open [`AGENTS.md`](./AGENTS.md) in this repo, copy the section under **"JubarteAI Agent Identity"**, and paste it into your own project's `AGENTS.md` (cross-tool standard) or `CLAUDE.md` (Claude Code only). Replace the `<repo-slug>` and `<agent-description>` placeholders — the template explains both. This step is what makes the session-start `connect` → `echo_current_task` → `search_knowledge` loop reliable.
+### 3. Add the AGENTS.md section to your project
 
-### Standalone skill (no plugin)
+`jubarteai init` does this for you. To do it by hand, open [`AGENTS.md`](./AGENTS.md) in this repo, copy the section under **"JubarteAI Agent Identity"**, and paste it into your own project's `AGENTS.md` (cross-tool standard) or `CLAUDE.md` (Claude Code only). Replace the `<repo-slug>` and `<agent-description>` placeholders — the template explains both. This step is what makes the session-start `connect` → `echo-current-task` → `search-knowledge` loop reliable.
 
-If you can't use the plugin marketplace, copy the `skills/jubarteai/` directory (`SKILL.md` + `references/`) into an agent skills directory (e.g. `~/.claude/skills/jubarteai/`). You still need step 2.
+### Using the MCP tools instead (fallback)
+
+The CLI is the primary way in. If you can't install it, the same tools are exposed as MCP tools — see [MCP endpoint](#mcp-endpoint) below — and the skill uses them when the `jubarteai` command isn't installed, isn't signed in, or can't reach the network. One transport per conversation, never both.
 
 ## Updating
 
-New versions add guidance for new JubarteAI tools, so keep the skill current. If you have a JubarteAI API key, we email you when a new minor or major version ships. Update the same way you installed.
+New versions add guidance for new JubarteAI commands, so keep the CLI and the skill current. If you have a JubarteAI API key, we email you when a new minor or major version ships.
+
+The one command that covers everything:
+
+```bash
+jubarteai update
+```
+
+It checks for a newer CLI first (offering `npm install -g jubarteai@<version>`), then refreshes the skill through the channel it was installed with (Claude Code plugin, `npx skills`, or a hand copy), keeps the AGENTS.md section current, and offers to clean up leftover MCP entries. `jubarteai update --check` only reports what would change; it never reads or prints your key. The key-less one-liner `curl -fsSL https://jubarte.ai/update.sh | bash` (Windows: `irm https://jubarte.ai/update.ps1 | iex`) does the same for machines without the CLI on PATH.
+
+Updating the pieces by hand, if you prefer:
 
 ### Claude Code plugin
 
@@ -95,24 +127,26 @@ Add `-g` if you installed the skill globally. To see whether an update is availa
 
 Copy the `skills/jubarteai/` directory from this repo over your existing copy again (for example `~/.claude/skills/jubarteai/`).
 
-You don't need to change the AGENTS.md section from step 2 when you update.
+### Upgrading from skill 1.x (MCP-only)
+
+2.0.0 switches every example from `mcp__jubarteai__*` tool calls to `jubarteai` commands and keeps the MCP tools as a fallback. Run `jubarteai update` (or install the CLI as above); the old AGENTS.md section is replaced by the new one automatically, or re-copy it by hand from [`AGENTS.md`](./AGENTS.md). Until the CLI is installed and signed in, an agent with the MCP tools configured keeps working through them.
 
 ## Release process
 
 For maintainers:
 
 1. Bump `version` in both `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`. Plugin installs only pick up a change when the version changes.
-2. Merge to `main` only after every server change the new guidance relies on is live in production.
+2. Merge to `main` only after every server change the new guidance relies on is live in production — and, for guidance that tells agents to run a `jubarteai` command or flag, only after the CLI release carrying it is published to npm.
 3. For a **minor or major** bump, the JubarteAI app PR that bumps its `jubarteai-skill` pin must add a release note for that version (`SKILL_RELEASE_NOTES` in `src/config/skill-releases.ts`). Once the version is on this repo's `main` and the app deploy is live, users who created an API key get an email and a dashboard notice with that note. The app's CI fails when the pinned version's minor line has no note.
 4. **Patch** bumps announce nothing — they reach users through the normal update paths above.
 
 ## MCP endpoint
 
-Point your client at `http://localhost:3000/api/mcp` (or the deployed URL) with:
+The MCP server is the fallback transport (and what the CLI calls under the hood). Point an MCP client at `https://jubarte.ai/api/mcp` (or `http://localhost:3000/api/mcp` locally) with:
 
 ```
 Authorization: Bearer jba_<your-token>
 Accept: application/json, text/event-stream
 ```
 
-Generate an API key from the [JubarteAI dashboard](https://jubarte.ai). Keys never expire until revoked.
+Generate an API key from the [JubarteAI dashboard](https://jubarte.ai) (Dashboard → API keys), or let `jubarteai login` mint one for the CLI. Keys never expire until revoked.
