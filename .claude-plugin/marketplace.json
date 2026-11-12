@@ -6,15 +6,15 @@
   "plugins": [
     {
       "name": "jubarteai-mcp",
-      "description": "Workflow guidance skill for the JubarteAI MCP.",
+      "description": "Workflow guidance skill for the JubarteAI CLI (MCP tools as a fallback).",
       "category": "productivity",
       "source": {
         "source": "url",
         "url": "https://github.com/jubarteai/jubarteai-skills.git"
       },
       "homepage": "https://github.com/jubarteai/jubarteai-skills",
-      "tags": ["mcp", "agents", "coordination", "knowledge"],
-      "version": "1.7.1"
+      "tags": ["cli", "mcp", "agents", "coordination", "knowledge"],
+      "version": "2.0.0"
     }
   ]
 }

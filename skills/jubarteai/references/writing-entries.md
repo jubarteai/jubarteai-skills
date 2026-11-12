@@ -1,10 +1,10 @@
 # Writing knowledge entries
 
-Everything you need to write a good `create_knowledge` or `update_knowledge` call: what to capture, choosing a `kind`, freshness assessment, and what never to write.
+Everything you need to write a good `jubarteai create-knowledge` or `update-knowledge` call (bodies go through `--description-file -`, array fields repeat their flag): what to capture, choosing a `kind`, freshness assessment, and what never to write.
 
 ## What to capture as knowledge
 
-**Default rule: if you'd put it in a comment, a README, or a Slack message to a teammate — put it in `create_knowledge` instead.** Short entries are fine; update them later. Examples of the everyday low bar:
+**Default rule: if you'd put it in a comment, a README, or a Slack message to a teammate — put it in `create-knowledge` instead.** Short entries are fine; update them later. Examples of the everyday low bar:
 
 - *"The type error fixed by importing from `@/lib/x`, not `@/x`"* ← write it
 - *"`bun test` requires `--preload ./setup.ts` or tests silently skip"* ← write it
@@ -26,15 +26,15 @@ Larger things also worth capturing:
 
 | Field | Guidance |
 |-------|----------|
-| `title` | One-line noun phrase: what is this knowledge *about*? (e.g. "Stripe webhook idempotency pattern") |
-| `description` | Lead with the insight, then the *why* (never just the *what*). Aim for 2–4 tight sentences (~400 chars) — you're billed for every character on every retrieval, so write dense, not long. Markdown renders, but don't reach for headers and bullet lists when two plain sentences carry the same content; reserve a code block for the one line of code that matters. See the "Keep MCP payloads lean" section in `SKILL.md`. |
-| `branches` | At least one. When unsure, `["main"]` is always a valid default. |
-| `repositories` | At least one. Canonical repo slug: lowercase bare repo name — the last path segment of `git remote get-url origin`, `.git` stripped (e.g. `"jubarteai"`, `"mobile-app"`), matching `^[a-z0-9][a-z0-9._-]*$`. Never a URL or `owner/name` — the server normalizes/dedupes and rejects what it can't. |
-| `refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
-| `paths` | Optional, default `[]`. Repo-relative file/dir paths the entry describes (e.g. `["src/lib/mcp/tools/knowledge.ts"]`). Set it on entries that assert how specific code behaves — a merged PR touching an overlapping path auto-flags the entry `needs_verification`. Matching ignores a leading `./` or `/` and a trailing `/`, and is case-sensitive. Skip for general conventions with no fixed file set. |
-| `tags` | Optional. A few short keyword labels (e.g. `["auth", "rate-limit"]`). They're returned in `search_knowledge` results, so a peer can triage which hit to fetch without opening the body — worth adding a couple. Keep them few and generic; don't duplicate `branches`/`refs`. |
-| `metadata` | Optional structured object — **allow-listed keys only**, not free text: `status` (`"in-progress"` \| `"blocked"` \| `"done"`, for a workdone's lifecycle) and `supersedes` / `related_ids` (knowledge-entry ids, to link entries). Both accept **one uuid or an array of up to 20** — every id is validated (must reference an existing entry in your company, on update also not the entry's own id). `supersedes` hides its pointed-at entry from `search_knowledge` by default; `related_ids` is undirected "see also" — it hides nothing, and is what the dashboard Knowledge Graph and `get_knowledge`'s `links` render. See "Cross-linking" below. |
-| `kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`. See "Choosing a `kind`" below. |
+| `--title` | One-line noun phrase: what is this knowledge *about*? (e.g. "Stripe webhook idempotency pattern") |
+| `--description` / `--description-file` | Lead with the insight, then the *why* (never just the *what*). Aim for 2–4 tight sentences (~400 chars) — you're billed for every character on every retrieval, so write dense, not long. Markdown renders, but don't reach for headers and bullet lists when two plain sentences carry the same content; reserve a code block for the one line of code that matters. See the "Keep MCP payloads lean" section in `SKILL.md`. |
+| `--branches` | At least one. When unsure, `--branches main` is always a valid default. |
+| `--repositories` | At least one. Canonical repo slug: lowercase bare repo name — the last path segment of `git remote get-url origin`, `.git` stripped (e.g. `"jubarteai"`, `"mobile-app"`), matching `^[a-z0-9][a-z0-9._-]*$`. Never a URL or `owner/name` — the server normalizes/dedupes and rejects what it can't. |
+| `--refs` | Optional. External identifiers tying the entry to the work that produced it: ticket IDs (`"ENG-441"`), GitHub issue/PR URLs, Linear/Jira IDs, design-doc links. Use the same identifier you put in `agent_tasks.refs` so a search by ref finds both. Free-form text. |
+| `--paths` | Optional, default none. Repo-relative file/dir paths the entry describes (e.g. `--paths src/lib/mcp/tools/knowledge.ts`). Set it on entries that assert how specific code behaves — a merged PR touching an overlapping path auto-flags the entry `needs_verification`. Matching ignores a leading `./` or `/` and a trailing `/`, and is case-sensitive. Skip for general conventions with no fixed file set. |
+| `--tags` | Optional. A few short keyword labels (e.g. `--tags auth --tags rate-limit`). They're returned in `search-knowledge` results, so a peer can triage which hit to fetch without opening the body — worth adding a couple. Keep them few and generic; don't duplicate `branches`/`refs`. |
+| `--metadata <json>` | Optional structured object — **allow-listed keys only**, not free text: `status` (`"in-progress"` \| `"blocked"` \| `"done"`, for a workdone's lifecycle) and `supersedes` / `related_ids` (knowledge-entry ids, to link entries). Both accept **one uuid or an array of up to 20** — every id is validated (must reference an existing entry in your company, on update also not the entry's own id). `supersedes` hides its pointed-at entry from `search-knowledge` by default; `related_ids` is undirected "see also" — it hides nothing, and is what the dashboard Knowledge Graph and `get-knowledge`'s `links` render. See "Cross-linking" below. |
+| `--kind` | Optional, defaults to `"knowledge"`. Enum: `knowledge` \| `decision` \| `memory` \| `note` \| `workdone`. See "Choosing a `kind`" below. |
 
 **Choosing a `kind`** — pick the value that matches what the entry actually is:
 
@@ -42,35 +42,35 @@ Larger things also worth capturing:
 - `"decision"` — architectural or design choices with rationale: why pattern X was chosen over Y, what was rejected and why. Higher-weight; future agents should treat these as the team's stance until explicitly superseded.
 - `"memory"` — durable per-fleet context that's not a "fix" or a "decision": user/team preferences, naming conventions, project-specific norms, repo slug conventions, things to remember across sessions. **Trigger to watch for:** if you had to *read existing code to learn how the team does something* before you could write your change consistently (a mapping layer, a guard every route calls, a file you must never hand-edit), that discovered convention is `memory` — capture it so the next agent doesn't reverse-engineer it. This one is easy to skip because applying a convention feels like using context, not learning something.
 - `"note"` — informal observations, in-progress hunches, lower-confidence findings that may need verification. Lighter than `knowledge` — useful for capturing leads you don't want to lose without overstating confidence.
-- `"workdone"` — per-session/per-task work log. The agent creates one workdone entry early and updates it as the session progresses. Future agents searching the same branch/repository/refs use these entries for handoffs, follow-up work, and conflict resolution. Tag with the same `branches` / `repositories` / `refs` as your `echo_current_task` so the entry is rediscoverable by every dimension. Distinct from `knowledge` (reusable findings) — workdone is a session log, not an encyclopedia entry. See `references/workdone.md` for the full protocol.
+- `"workdone"` — per-session/per-task work log. The agent creates one workdone entry early and updates it as the session progresses. Future agents searching the same branch/repository/refs use these entries for handoffs, follow-up work, and conflict resolution. Tag with the same `branches` / `repositories` / `refs` as your `echo-current-task` so the entry is rediscoverable by every dimension. Distinct from `knowledge` (reusable findings) — workdone is a session log, not an encyclopedia entry. See `references/workdone.md` for the full protocol.
 
-When a `note` matures into a confirmed finding, use `update_knowledge` to reclassify it as `knowledge` (or `decision`).
+When a `note` matures into a confirmed finding, use `update-knowledge` to reclassify it as `knowledge` (or `decision`).
 
-**Minimum viable entry**: a 2-sentence `description` with `branches: ["main"]` and the correct `repositories` slug is better than no entry. Default `kind: "knowledge"` is fine when you don't want to think about it. Write short and often; use `update_knowledge` to expand or reclassify later.
+**Minimum viable entry**: a 2-sentence description with `--branches main` and the correct `--repositories` slug is better than no entry. Default `--kind knowledge` is fine when you don't want to think about it. Write short and often; use `update-knowledge` to expand or reclassify later.
 
 **Example** (dense — insight, why, and fix in three sentences; ~300 chars):
-```
-title: "Supabase RLS bypass via service-role client"
-description: |
-  The service-role Supabase client bypasses all RLS, so on user-facing paths it
-  can leak cross-tenant data — the MCP route's resolved API key is the only trust
-  anchor. Never use it there; replace `supabaseAdmin` calls with a SECURITY DEFINER
-  RPC that runs with the caller's permissions.
-branches: ["main"]
-repositories: ["jubarteai"]
-refs: ["ENG-441", "https://github.com/org/jubarteai/pull/88"]
+```bash
+jubarteai create-knowledge --agent <id> --title "Supabase RLS bypass via service-role client" \
+  --branches main --repositories jubarteai \
+  --refs ENG-441 --refs https://github.com/org/jubarteai/pull/88 \
+  --description-file - <<'EOF'
+The service-role Supabase client bypasses all RLS, so on user-facing paths it
+can leak cross-tenant data — the MCP route's resolved API key is the only trust
+anchor. Never use it there; replace `supabaseAdmin` calls with a SECURITY DEFINER
+RPC that runs with the caller's permissions.
+EOF
 ```
 
 ## Assessing entry freshness
 
-Entries carry machine-readable freshness, not just age: `needs_verification` flags a possibly-stale entry, `verified_at` is the last confirmation, and a flagged entry's `flag_reason` (from `get_knowledge`) says why — a merged PR touched an overlapping `paths` entry, or it sat unverified 90 days. Creating an entry verifies it by its author; editing `title`/`description` re-verifies it.
+Entries carry machine-readable freshness, not just age: `needs_verification` flags a possibly-stale entry, `verified_at` is the last confirmation, and a flagged entry's `flag_reason` (from `get-knowledge`) says why — a merged PR touched an overlapping `paths` entry, or it sat unverified 90 days. Creating an entry verifies it by its author; editing `title`/`description` re-verifies it.
 
-- **On a `needs_verification: true` hit**, read `flag_reason` first, then re-check the code yourself — don't trust the flag *or* the old content blindly. Still holds → `verify_knowledge({ id })`; needs a fix → `update_knowledge` (which verifies too).
-- **Cross-reference against the code even when not flagged.** A renamed key or refactored function can make an entry misleading before the 90-day sweep or a bound PR catches it. Trust the code; `update_knowledge` to correct or deprecate.
+- **On a `needs_verification: true` hit**, read `flag_reason` first, then re-check the code yourself — don't trust the flag *or* the old content blindly. Still holds → `verify-knowledge --id <id>`; needs a fix → `update-knowledge` (which verifies too).
+- **Cross-reference against the code even when not flagged.** A renamed key or refactored function can make an entry misleading before the 90-day sweep or a bound PR catches it. Trust the code; `update-knowledge` to correct or deprecate.
 - **When an entry is clearly stale**, prepend a deprecation note (e.g. `> **Deprecated 2026-04:** this pattern was replaced by X — see "New pattern title" entry`).
-- **Cross-linking**: link related entries structurally via `metadata` — `supersedes: "<id>"` when this entry replaces an older one, `related_ids: ["<id>", …]` for see-also. Use entry **ids**, not titles: any agent can rename an entry via `update_knowledge`, which would silently break a by-title pointer and the `get_knowledge({ name })` lookup. `supersedes` is more than a pointer: the superseded entry is excluded from `search_knowledge` by default (visible only via `include_superseded: true`), so your entry becomes the one peers actually see — use it when you mean for the old entry to stop surfacing, not as a loose "see also." Chains resolve transitively (A supersedes B supersedes C leaves only A visible by default). Never supersede mutually (A↔B) — that hides both with nothing left visible. `related_ids` is validated the same way as `supersedes` (every id must exist in your company; on `update_knowledge` also not the entry's own id) — plus, unlike `supersedes`, every id must be a JubarteAI-sourced entry (Notion pages are read-only and cannot be linked) — but is **undirected and non-hiding** — it never removes anything from search. This is the field that powers the dashboard Knowledge Graph (`/dashboard/graph`) and `get_knowledge`'s `links` array, so it's the right place for a genuine "see also" pointer: e.g. `related_ids: ["<workdone_id>"]` on a finding you just promoted out of a workdone log, plus adding the new entry's id back onto the workdone's own `related_ids` on its next update.
-- **`supersedes` can be an array** (`metadata: { supersedes: ["<id1>", "<id2>", …] }`, up to 20) when one entry replaces *several* at once — this is exactly how a many-to-one merge is represented: a single new entry superseding a whole cluster of near-duplicates. You'll see this pattern from the automated consolidation feature (a nightly job proposes merges via `list_knowledge_merges`/`resolve_knowledge_merge` — see `SKILL.md`'s "Consolidation proposals"), but nothing stops you from writing one by hand the same way if you notice several entries covering the same ground.
-- **Verification is per-entry, not per-branch** — one `verify_knowledge` call clears the flag everywhere the entry is tagged, regardless of which branch/repo you're on.
+- **Cross-linking**: link related entries structurally via `metadata` — `supersedes: "<id>"` when this entry replaces an older one, `related_ids: ["<id>", …]` for see-also. Use entry **ids**, not titles: any agent can rename an entry via `update-knowledge`, which would silently break a by-title pointer and the `get-knowledge --name` lookup. `supersedes` is more than a pointer: the superseded entry is excluded from `search-knowledge` by default (visible only via `--include-superseded`), so your entry becomes the one peers actually see — use it when you mean for the old entry to stop surfacing, not as a loose "see also." Chains resolve transitively (A supersedes B supersedes C leaves only A visible by default). Never supersede mutually (A↔B) — that hides both with nothing left visible. `related_ids` is validated the same way as `supersedes` (every id must exist in your company; on `update-knowledge` also not the entry's own id) — plus, unlike `supersedes`, every id must be a JubarteAI-sourced entry (Notion pages are read-only and cannot be linked) — but is **undirected and non-hiding** — it never removes anything from search. This is the field that powers the dashboard Knowledge Graph (`/dashboard/graph`) and `get-knowledge`'s `links` array, so it's the right place for a genuine "see also" pointer: e.g. `related_ids: ["<workdone_id>"]` on a finding you just promoted out of a workdone log, plus adding the new entry's id back onto the workdone's own `related_ids` on its next update.
+- **`supersedes` can be an array** (`metadata: { supersedes: ["<id1>", "<id2>", …] }`, up to 20) when one entry replaces *several* at once — this is exactly how a many-to-one merge is represented: a single new entry superseding a whole cluster of near-duplicates. You'll see this pattern from the automated consolidation feature (a nightly job proposes merges via `list-knowledge-merges`/`resolve-knowledge-merge` — see `SKILL.md`'s "Consolidation proposals"), but nothing stops you from writing one by hand the same way if you notice several entries covering the same ground.
+- **Verification is per-entry, not per-branch** — one `verify-knowledge` call clears the flag everywhere the entry is tagged, regardless of which branch/repo you're on.
 
 ## What never to put in knowledge entries
 
