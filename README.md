@@ -27,7 +27,7 @@ Installation is two parts: the **`jubarteai` CLI** (agents talk to JubarteAI thr
 npm i -g jubarteai && jubarteai init
 ```
 
-Needs Node 22 or newer. `jubarteai init` signs you in (a browser login), binds the repo to a workspace, installs this skill for the coding agents it finds, adds the AGENTS.md section below, and — each behind its own prompt — adds a permission rule and hooks for your harness and removes any old JubarteAI MCP entry. Re-running it is safe.
+Needs Node 22.23.5 or newer on the 22 line, 24.22.3 or newer on the 24 line, or 26.13.1 or newer (odd-numbered Node releases are not supported). `jubarteai init` signs you in (a browser login), binds the repo to a workspace, then shows **one checklist** of everything it will set up: this skill for the coding agents it finds, the AGENTS.md section below, a permission rule and hooks for each harness, and the removal of any old JubarteAI MCP entry. Enter applies it all, Space leaves a row (or a whole harness) out, and `d` shows the exact changes first. That checklist is the only approval. Re-running `init` is safe.
 
 Prefer a one-liner? These install the CLI and run `init` for you:
 
@@ -95,7 +95,7 @@ The one command that covers everything:
 jubarteai update
 ```
 
-It checks for a newer CLI first (offering `npm install -g jubarteai@<version>`), then refreshes the skill through the channel it was installed with (Claude Code plugin, `npx skills`, or a hand copy), keeps the AGENTS.md section current, and offers to clean up leftover MCP entries. `jubarteai update --check` only reports what would change; it never reads or prints your key. The key-less one-liner `curl -fsSL https://jubarte.ai/update.sh | bash` (Windows: `irm https://jubarte.ai/update.ps1 | iex`) does the same for machines without the CLI on PATH.
+It checks for a newer CLI first (offering `npm install -g jubarteai@<version>`), then refreshes the skill through the channel it was installed with (Claude Code plugin, `npx skills`, or a hand copy), keeps the AGENTS.md section current, and cleans up leftover MCP entries. It asks one question for all of it: Yes, No, or Show the exact changes. `jubarteai update --check` only reports what would change; it never reads or prints your key. The key-less one-liner `curl -fsSL https://jubarte.ai/update.sh | bash` (Windows: `irm https://jubarte.ai/update.ps1 | iex`) does the same for machines without the CLI on PATH.
 
 Updating the pieces by hand, if you prefer:
 
@@ -130,6 +130,14 @@ Copy the `skills/jubarteai/` directory from this repo over your existing copy ag
 ### Upgrading from skill 1.x (MCP-only)
 
 2.0.0 switches every example from `mcp__jubarteai__*` tool calls to `jubarteai` commands and keeps the MCP tools as a fallback. Run `jubarteai update` (or install the CLI as above); the old AGENTS.md section is replaced by the new one automatically, or re-copy it by hand from [`AGENTS.md`](./AGENTS.md). Until the CLI is installed and signed in, an agent with the MCP tools configured keeps working through them.
+
+## Uninstalling
+
+```bash
+jubarteai uninstall
+```
+
+It takes back what `init` wrote, behind one checklist like `init`'s: the hooks and permission rules, the AGENTS.md section, the repo binding, this skill, and your saved logins on this machine (`--keep-login` keeps them). Signing out is local: an API key keeps working until you revoke it in the dashboard under API keys. It then prints `npm uninstall -g jubarteai`, which removes the CLI itself.
 
 ## Release process
 
