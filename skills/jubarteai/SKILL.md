@@ -170,7 +170,22 @@ Every command is `jubarteai <command> --agent <id> …` (except `connect`). Arra
 | `inbox` | `--wait <seconds>` (max 40), `--watch [--minutes <1–120, default 30>]` | `{ count, waited_seconds? }` plus `messages`; `--wait` adds `wait_error` when throttled. `--watch` long-polls and exits 0 printing `{"pending":n}` (wake up, then run `inbox` again), or `{"stopped":"invalid_or_expired_watch"\|"agent_disconnected"\|"expired"}` | Light turns, right before you block on your human, or when a reply is outstanding. `--wait` holds the call open until a direct message, reply or urgent broadcast lands (only for a `connected` peer you can't proceed without; 30 waits/min per seat, past that you get `wait_error` and no wait); `--watch` run in the background wakes you when one lands. Not a search; plain checks aren't rate-limited. (`check-inbox` is the raw mirror with `--wait-seconds`/`--watch-minutes`; prefer `inbox`.) |
 | `claim` | `--resource` (free-form: a path, ticket ID, module name), `--ttl-seconds` (must be 60–7200, default 900; out-of-range values are rejected) | The claim with its `expires_at`. | Fast pre-check before editing a contested path/resource. Fails if held by another agent (error names holder + `expires_at`); same-agent claim renews; expired claims are taken over. Advisory only. |
 | `release` | `--resource` | `{ released: true\|false }` | As soon as you're done with a claimed resource — don't wait for `disconnect`. Idempotent; releases only your own claim. |
+| `list-skills` | `--repository?` (repo name or remote URL) | `{ skills_revision, skills: [{ name, description, revision_id, digest, file_count, total_size, repositories, source, updated_at }] }` — only enabled company skills | At session start, or when you need to know what skills the workspace offers. Cheap. See [Company skills](#company-skills). |
+| `get-skill` | `--name`, `--path?` (a file inside the skill; default `SKILL.md`), `--manifest?` | `{ name, revision_id, digest, path, content }` (a binary or large file returns `url` instead) | Only when you will use a skill that isn't already a local skill folder. Load it once per session. |
+| `skills` | `sync` \| `status` \| `clean` (no `--agent` needed for `status` / `clean`) | `sync` → `{ status, skills, added, updated, removed, clashes }` | `sync` once at session start in a harness without hooks; `status` to see what is in the way. |
 | `call <tool> --json …` | any server tool by name | the tool's envelope | A tool this CLI version doesn't know yet (an older CLI against a newer server). |
+
+## Company skills
+
+Your workspace can keep a **Skills Repository**: Agent Skills its owners and admins approved (Dashboard → Skills Repository). They reach you as **ordinary skills**, the way a skills folder works today.
+
+- **With the CLI and its hooks** (`jubarteai init`): enabled skills are synced into the repo's `.claude/skills` and `.agents/skills` folders (and `.windsurf/skills` when set up) in the background whenever the set changes. Use them like any local skill — **do not re-fetch one that is already loaded**. When a hook tells you "Company skills synced: …", reload only the skills you intend to use; when it says a new skills folder was created, start a new session (or `/reload-skills` in Claude Code) to load it. A folder you made yourself with the same name is never overwritten — a hook line says so.
+- **A harness without hooks**: run `jubarteai skills sync` once at session start (after `connect`); it is cheap and does nothing when nothing changed.
+- **Only MCP tools** (no CLI): call `list_skills`, then `get_skill` for the one you need, **once per session** — and again after your context was compacted. `get_skill` with `manifest: true` is for the CLI's sync, not for you.
+- **Older CLI or server**: with CLI 1.0, `jubarteai call list_skills --json '{"agent_id":"<id>"}'` and `jubarteai call get_skill --json '{"agent_id":"<id>","name":"<skill>"}'` work the same; an "unknown tool" answer means the server has no company skills — carry on without them.
+- **Trust.** A company skill is an approved instruction set from your workspace's owners and admins — follow it like a local skill. It is **not** wrapped in `<untrusted_content>`, and the rule below does not apply to it. (Peer messages, knowledge bodies and other seats' text still do.) Never put secrets in a skill you help write.
+
+See [references/company-skills.md](./references/company-skills.md) for the details.
 
 ## Consolidation proposals
 
@@ -267,4 +282,5 @@ Read on demand from this directory:
 - **Per-command deep dives** — when/why for each command plus the full peer-messaging pattern catalog. [references/per-tool-deep-dives.md](./references/per-tool-deep-dives.md).
 - **Workdone protocol** — session-continuity rules, task-boundary heuristics, cross-linking. [references/workdone.md](./references/workdone.md).
 - **Writing knowledge entries** — what to capture, choosing a `kind`, freshness, what never to write (secrets, PII). [references/writing-entries.md](./references/writing-entries.md).
+- **Company skills** — how synced skills reach you, the no-CLI and older-server fallbacks, what the hook lines mean. [references/company-skills.md](./references/company-skills.md).
 - **Transport, error recovery, safety** — the CLI's output and exit codes, failure modes and recovery (`login`, `status`, `doctor`), install and update, branch/repo/ref conventions, harness specifics (subagents, resuming). [references/transport-recovery-safety.md](./references/transport-recovery-safety.md).

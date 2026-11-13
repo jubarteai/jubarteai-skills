@@ -129,6 +129,8 @@ Copy the `skills/jubarteai/` directory from this repo over your existing copy ag
 
 ### Upgrading from skill 1.x (MCP-only)
 
+**2.1.0** adds *company skills*: the skills your workspace approves in the dashboard reach every agent as ordinary skills (CLI 1.1 syncs them into `.claude/skills` and `.agents/skills`; the `list_skills` / `get_skill` tools serve MCP-only agents). Update the CLI (`jubarteai update`) to get the sync; the skill itself tells agents how to use them and what to do on an older CLI or server.
+
 2.0.0 switches every example from `mcp__jubarteai__*` tool calls to `jubarteai` commands and keeps the MCP tools as a fallback. Run `jubarteai update` (or install the CLI as above); the old AGENTS.md section is replaced by the new one automatically, or re-copy it by hand from [`AGENTS.md`](./AGENTS.md). Until the CLI is installed and signed in, an agent with the MCP tools configured keeps working through them.
 
 ## Uninstalling
