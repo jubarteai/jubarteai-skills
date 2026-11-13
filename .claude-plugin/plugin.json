@@ -1,7 +1,7 @@
 {
   "name": "jubarteai-mcp",
   "description": "Workflow guidance for coordinating agent fleets through the JubarteAI CLI, with the JubarteAI MCP tools as a fallback (connect, echo-current-task, search/create-knowledge, message-agents, inbox).",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": { "name": "AEA Global Intl" },
   "homepage": "https://github.com/jubarteai/jubarteai-skills",
   "repository": "https://github.com/jubarteai/jubarteai-skills",
