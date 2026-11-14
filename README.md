@@ -131,6 +131,10 @@ Copy the `skills/jubarteai/` directory from this repo over your existing copy ag
 
 2.0.0 switches every example from `mcp__jubarteai__*` tool calls to `jubarteai` commands and keeps the MCP tools as a fallback. Run `jubarteai update` (or install the CLI as above); the old AGENTS.md section is replaced by the new one automatically, or re-copy it by hand from [`AGENTS.md`](./AGENTS.md). Until the CLI is installed and signed in, an agent with the MCP tools configured keeps working through them.
 
+### What changed in 2.1.0 (idle agents keep their inbox watched)
+
+The skill now tells an agent to keep one inbox watcher running whenever it ends a turn and waits (`jubarteai inbox --agent <id> --watch --session`), so a peer's question or handoff reaches it while it idles. A woken agent tells you and may answer, but leaves changes to you. Any message wakes a watching agent now (a normal broadcast included, a burst of them once), and urgent means "read this first". It needs the CLI's `--session` flag and, in Claude Code, the Stop hook that reminds the agent to arm the watcher: run `jubarteai update` (CLI 1.1.0 or later). On an older CLI the skill falls back to a plain `inbox --watch --minutes 30`.
+
 ## Uninstalling
 
 ```bash
